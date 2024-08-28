@@ -2,6 +2,7 @@ package friends
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/jackc/pgx/v4"
@@ -26,7 +27,7 @@ func NewService(db *pgxpool.Pool) *Service {
 }
 
 // Creates a friendship between two users
-func (friendService *Service) Create(userID int, friendID int) (Friend, error) {
+func (friendService *Service) Create(userID string, friendID string) (Friend, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 
@@ -39,16 +40,19 @@ func (friendService *Service) Create(userID int, friendID int) (Friend, error) {
 		return Friend{}, err
 	}
 
+	userIDStr, _ := strconv.Atoi(userID)
+	friendIDStr, _ := strconv.Atoi(friendID)
+
 	// Return the friendship details without querying again
 	return Friend{
-		UserID:    userID,
-		FriendID:  friendID,
+		UserID:    userIDStr,
+		FriendID:  friendIDStr,
 		CreatedAt: "", // We assume created_at is automatically handled by the database.
 	}, nil
 }
 
 // Removes a friendship between two users
-func (friendService *Service) Delete(userID int, friendID int) (bool, error) {
+func (friendService *Service) Delete(userID string, friendID string) (bool, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 
@@ -69,13 +73,13 @@ func (friendService *Service) Delete(userID int, friendID int) (bool, error) {
 }
 
 // Retrieves all friends of a given user
-func (friendService *Service) ReadAll(userID int) ([]Friend, error) {
+func (friendService *Service) ReadAll(userID string) ([]Friend, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 
 	rows, err := friendService.db.Query(
 		context.Background(),
-		"SELECT user_id, friend_id, created_at FROM friends WHERE user_id = $1",
+		"SELECT user_id, friend_id, created_at::text FROM friends WHERE user_id = $1",
 		userID,
 	)
 	if err != nil {
@@ -96,7 +100,7 @@ func (friendService *Service) ReadAll(userID int) ([]Friend, error) {
 }
 
 // Checks if two users are friends
-func (friendService *Service) Read(userID int, friendID int) (bool, error) {
+func (friendService *Service) Read(userID string, friendID string) (bool, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 

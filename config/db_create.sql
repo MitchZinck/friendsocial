@@ -48,15 +48,18 @@ CREATE TABLE friends (
     user_id INTEGER NOT NULL,
     friend_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_ordered_id1 INTEGER GENERATED ALWAYS AS (LEAST(user_id, friend_id)) STORED,
+    user_ordered_id2 INTEGER GENERATED ALWAYS AS (GREATEST(user_id, friend_id)) STORED,
     CONSTRAINT pk_friends PRIMARY KEY (user_id, friend_id),
     CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_friend FOREIGN KEY (friend_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT chk_not_self_friend CHECK (user_id <> friend_id),
-    CONSTRAINT uq_friends_pair UNIQUE (LEAST(user_id, friend_id), GREATEST(user_id, friend_id)) -- Prevent duplicate relationships
+    CONSTRAINT uq_friends_pair UNIQUE (user_ordered_id1, user_ordered_id2) -- Prevent duplicate relationships
 );
 
 CREATE INDEX idx_friends_user_id ON friends (user_id); -- Index on user_id
 CREATE INDEX idx_friends_friend_id ON friends (friend_id); -- Index on friend_id
+CREATE INDEX idx_friends_pair ON friends (user_ordered_id1, user_ordered_id2); -- Index on pair
 
 CREATE TABLE user_availability (
     id SERIAL PRIMARY KEY,

@@ -48,11 +48,11 @@ func (s *Service) Create(availability UserAvailability) (UserAvailability, error
 	return availability, nil
 }
 
-func (s *Service) ReadAll() ([]UserAvailability, error) {
+func (s *Service) ReadAll(userID string) ([]UserAvailability, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, day_of_week, start_time, end_time, is_available FROM user_availability")
+	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, day_of_week, start_time, end_time, is_available FROM user_availability WHERE user_id = $1", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (s *Service) ReadAll() ([]UserAvailability, error) {
 	return availabilities, nil
 }
 
-func (s *Service) Read(id int) (UserAvailability, bool, error) {
+func (s *Service) Read(id string) (UserAvailability, bool, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -90,7 +90,7 @@ func (s *Service) Read(id int) (UserAvailability, bool, error) {
 	return availability, true, nil
 }
 
-func (s *Service) Update(id int, availability UserAvailability) (UserAvailability, bool, error) {
+func (s *Service) Update(id string, availability UserAvailability) (UserAvailability, bool, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -113,7 +113,7 @@ func (s *Service) Update(id int, availability UserAvailability) (UserAvailabilit
 	return availability, true, nil
 }
 
-func (s *Service) Delete(id int) (bool, error) {
+func (s *Service) Delete(id string) (bool, error) {
 	s.Lock()
 	defer s.Unlock()
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// ActivityService defines the interface for activity services
 type ActivityService interface {
 	Create(activity Activity) (Activity, error)
 	ReadAll() ([]Activity, error)
@@ -13,21 +14,35 @@ type ActivityService interface {
 	Delete(id string) (bool, error)
 }
 
+// ActivityError represents an error response
 type ActivityError struct {
 	StatusCode int    `json:"status_code"`
 	Error      string `json:"error"`
 }
 
+// ActivityHTTPHandler handles HTTP requests for activities
 type ActivityHTTPHandler struct {
 	activityService ActivityService
 }
 
+// NewActivityHTTPHandler creates a new ActivityHTTPHandler
 func NewActivityHTTPHandler(activityService ActivityService) *ActivityHTTPHandler {
 	return &ActivityHTTPHandler{
 		activityService: activityService,
 	}
 }
 
+// HandleHTTPPost handles the creation of a new activity
+//	@Summary		Create a new activity
+//	@Description	Create a new activity
+//	@Tags			activities
+//	@Accept			json
+//	@Produce		json
+//	@Param			activity	body		Activity	true	"Activity object"
+//	@Success		201			{object}	Activity
+//	@Failure		400			{object}	ActivityError
+//	@Failure		500			{object}	ActivityError
+//	@Router			/activities [post]
 func (aH *ActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Request) {
 	var activity Activity
 	err := json.NewDecoder(r.Body).Decode(&activity)
@@ -51,6 +66,15 @@ func (aH *ActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// HandleHTTPGet handles fetching all activities
+//	@Summary		Get all activities
+//	@Description	Get all activities
+//	@Tags			activities
+//	@Produce		json
+//	@Success		200	{array}		Activity
+//	@Failure		400	{object}	ActivityError
+//	@Failure		500	{object}	ActivityError
+//	@Router			/activities [get]
 func (aH *ActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
 	activities, err := aH.activityService.ReadAll()
 	if err != nil {
@@ -66,6 +90,17 @@ func (aH *ActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// HandleHTTPGetWithID handles fetching an activity by ID
+//	@Summary		Get an activity by ID
+//	@Description	Get an activity by ID
+//	@Tags			activities
+//	@Produce		json
+//	@Param			id	path		string	true	"Activity ID"
+//	@Success		200	{object}	Activity
+//	@Failure		400	{object}	ActivityError
+//	@Failure		404	{object}	ActivityError
+//	@Failure		500	{object}	ActivityError
+//	@Router			/activities/{id} [get]
 func (aH *ActivityHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -88,6 +123,19 @@ func (aH *ActivityHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *htt
 	}
 }
 
+// HandleHTTPPut handles updating an activity
+//	@Summary		Update an activity by ID
+//	@Description	Update an activity by ID
+//	@Tags			activities
+//	@Accept			json
+//	@Produce		json
+//	@Param			id			path		string		true	"Activity ID"
+//	@Param			activity	body		Activity	true	"Updated Activity object"
+//	@Success		200			{object}	Activity
+//	@Failure		400			{object}	ActivityError
+//	@Failure		404			{object}	ActivityError
+//	@Failure		500			{object}	ActivityError
+//	@Router			/activities/{id} [put]
 func (aH *ActivityHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -117,6 +165,16 @@ func (aH *ActivityHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// HandleHTTPDelete handles deleting an activity by ID
+//	@Summary		Delete an activity by ID
+//	@Description	Delete an activity by ID
+//	@Tags			activities
+//	@Param			id	path	string	true	"Activity ID"
+//	@Success		204
+//	@Failure		400	{object}	ActivityError
+//	@Failure		404	{object}	ActivityError
+//	@Failure		500	{object}	ActivityError
+//	@Router			/activities/{id} [delete]
 func (aH *ActivityHTTPHandler) HandleHTTPDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 

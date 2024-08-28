@@ -4,47 +4,57 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-
-	"github.com/gorilla/mux"
 )
 
+// FriendService defines the interface for the friend service
 type FriendService interface {
-	Create(userID int, friendID int) (Friend, error)
-	Delete(userID int, friendID int) (bool, error)
-	ReadAll(userID int) ([]Friend, error)
-	Read(userID int, friendID int) (bool, error)
+	Create(userID string, friendID string) (Friend, error)
+	ReadAll(userID string) ([]Friend, error)
+	Read(userID string, friendID string) (bool, error)
+	Delete(userID string, friendID string) (bool, error)
 }
 
+// FriendError represents an error response
 type FriendError struct {
 	StatusCode int    `json:"status_code"`
 	Error      string `json:"error"`
 }
 
+// FriendHTTPHandler is the HTTP handler for friend-related operations
 type FriendHTTPHandler struct {
 	friendService FriendService
 }
 
+// NewFriendHTTPHandler creates a new FriendHTTPHandler
 func NewFriendHTTPHandler(friendService FriendService) *FriendHTTPHandler {
 	return &FriendHTTPHandler{
 		friendService: friendService,
 	}
 }
 
-func (fH *FriendHTTPHandler) HandleHTTPPostAddFriend(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["user_id"])
+// HandleHTTPPost creates a new friendship
+//	@Summary		Create a new friendship
+//	@Description	Create a new friendship between two users
+//	@Tags			friends
+//	@Accept			json
+//	@Produce		json
+//	@Param			friend	body		Friend	true	"Friendship information"
+//	@Success		201		{object}	Friend
+//	@Failure		400		{object}	FriendError
+//	@Failure		500		{object}	FriendError
+//	@Router			/friends [post]
+func (fH *FriendHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Request) {
+	var friend Friend
+	err := json.NewDecoder(r.Body).Decode(&friend)
 	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid user_id")
+		fH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	friendID, err := strconv.Atoi(vars["friend_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid friend_id")
-		return
-	}
+	friendIDStr := strconv.Itoa(friend.UserID)
+	friendFriendIDStr := strconv.Itoa(friend.FriendID)
 
-	friend, err := fH.friendService.Create(userID, friendID)
+	newFriend, err := fH.friendService.Create(friendIDStr, friendFriendIDStr)
 	if err != nil {
 		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
@@ -52,48 +62,24 @@ func (fH *FriendHTTPHandler) HandleHTTPPostAddFriend(w http.ResponseWriter, r *h
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	err = json.NewEncoder(w).Encode(friend)
+	err = json.NewEncoder(w).Encode(newFriend)
 	if err != nil {
 		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 }
 
-func (fH *FriendHTTPHandler) HandleHTTPDeleteRemoveFriend(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["user_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid user_id")
-		return
-	}
-
-	friendID, err := strconv.Atoi(vars["friend_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid friend_id")
-		return
-	}
-
-	found, err := fH.friendService.Delete(userID, friendID)
-	if err != nil {
-		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if !found {
-		fH.errorResponse(w, http.StatusNotFound, "Friendship not found")
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (fH *FriendHTTPHandler) HandleHTTPGetFriends(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["user_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid user_id")
-		return
-	}
+// HandleHTTPGet retrieves all friends of a user
+//	@Summary		Get all friends of a user
+//	@Description	Retrieve all friendships for a given user
+//	@Tags			friends
+//	@Produce		json
+//	@Param			user_id	path		string	true	"User ID"
+//	@Success		200		{array}		Friend
+//	@Failure		500		{object}	FriendError
+//	@Router			/friends/{user_id} [get]
+func (fH *FriendHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
 
 	friends, err := fH.friendService.ReadAll(userID)
 	if err != nil {
@@ -109,34 +95,64 @@ func (fH *FriendHTTPHandler) HandleHTTPGetFriends(w http.ResponseWriter, r *http
 	}
 }
 
-func (fH *FriendHTTPHandler) HandleHTTPGetIsFriends(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID, err := strconv.Atoi(vars["user_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid user_id")
-		return
-	}
+// HandleHTTPGetWithID checks if a specific friendship exists
+//	@Summary		Check if a specific friendship exists
+//	@Description	Check if a friendship exists between two users
+//	@Tags			friends
+//	@Produce		json
+//	@Param			user_id		path	string	true	"User ID"
+//	@Param			friend_id	path	string	true	"Friend ID"
+//	@Success		200
+//	@Failure		404	{object}	FriendError
+//	@Failure		500	{object}	FriendError
+//	@Router			/friends/{user_id}/{friend_id} [get]
+func (fH *FriendHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+	friendID := r.PathValue("friend_id")
 
-	friendID, err := strconv.Atoi(vars["friend_id"])
-	if err != nil {
-		fH.errorResponse(w, http.StatusBadRequest, "Invalid friend_id")
-		return
-	}
-
-	isFriend, err := fH.friendService.Read(userID, friendID)
+	exists, err := fH.friendService.Read(userID, friendID)
 	if err != nil {
 		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(map[string]bool{"is_friend": isFriend})
-	if err != nil {
-		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
+	if !exists {
+		fH.errorResponse(w, http.StatusNotFound, "Friendship not found")
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
+// HandleHTTPDelete deletes a friendship
+//	@Summary		Delete a friendship
+//	@Description	Delete an existing friendship between two users
+//	@Tags			friends
+//	@Param			user_id		path	string	true	"User ID"
+//	@Param			friend_id	path	string	true	"Friend ID"
+//	@Success		204
+//	@Failure		404	{object}	FriendError
+//	@Failure		500	{object}	FriendError
+//	@Router			/friends/{user_id}/{friend_id} [delete]
+func (fH *FriendHTTPHandler) HandleHTTPDelete(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+	friendID := r.PathValue("friend_id")
+
+	found, err := fH.friendService.Delete(userID, friendID)
+	if err != nil {
+		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if !found {
+		fH.errorResponse(w, http.StatusNotFound, "Friendship not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// errorResponse sends a JSON error response
 func (fH *FriendHTTPHandler) errorResponse(w http.ResponseWriter, statusCode int, errorString string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

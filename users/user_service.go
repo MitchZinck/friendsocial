@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/jackc/pgx/v4"
@@ -30,15 +31,17 @@ func (userService *Service) Create(user User) (User, error) {
 	userService.Lock()
 	defer userService.Unlock()
 
-	_, err := userService.db.Exec(
+	var userID int
+	err := userService.db.QueryRow(
 		context.Background(),
-		"INSERT INTO users (name, email, password) VALUES ($1, $2, $3)",
+		"INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id",
 		user.Name, user.Email, user.Password,
-	)
+	).Scan(&userID)
 	if err != nil {
 		return User{}, err
 	}
 
+	user.ID = userID
 	user.Password = ""
 
 	return user, nil
@@ -112,4 +115,38 @@ func (userService *Service) Delete(id string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (userService *Service) PartialUpdate(id string, updates map[string]interface{}) (User, bool, error) {
+	userService.Lock()
+	defer userService.Unlock()
+
+	// Build the dynamic SQL query
+	query := "UPDATE users SET"
+	args := []interface{}{}
+	argCount := 1
+
+	for key, value := range updates {
+		if argCount > 1 {
+			query += ","
+		}
+		query += fmt.Sprintf(" %s = $%d", key, argCount)
+		args = append(args, value)
+		argCount++
+	}
+
+	query += fmt.Sprintf(" WHERE id = $%d RETURNING id, name, email", argCount)
+	args = append(args, id)
+
+	// Execute the update
+	var user User
+	err := userService.db.QueryRow(context.Background(), query, args...).Scan(&user.ID, &user.Name, &user.Email)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return User{}, false, nil
+		}
+		return User{}, false, err
+	}
+
+	return user, true, nil
 }

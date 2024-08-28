@@ -44,7 +44,7 @@ func (service *Service) Create(userActivity UserActivity) (UserActivity, error) 
 }
 
 // Read all user activities for a specific user
-func (service *Service) ReadAll(userID int) ([]UserActivity, error) {
+func (service *Service) ReadAll(userID string) ([]UserActivity, error) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -67,7 +67,7 @@ func (service *Service) ReadAll(userID int) ([]UserActivity, error) {
 }
 
 // Read a specific user activity by ID
-func (service *Service) Read(id int) (UserActivity, bool, error) {
+func (service *Service) Read(id string) (UserActivity, bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -84,7 +84,7 @@ func (service *Service) Read(id int) (UserActivity, bool, error) {
 }
 
 // Update an existing user activity
-func (service *Service) Update(id int, userActivity UserActivity) (UserActivity, bool, error) {
+func (service *Service) Update(id string, userActivity UserActivity) (UserActivity, bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -102,7 +102,7 @@ func (service *Service) Update(id int, userActivity UserActivity) (UserActivity,
 }
 
 // Delete a user activity by ID
-func (service *Service) Delete(id int) (bool, error) {
+func (service *Service) Delete(id string) (bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -119,7 +119,7 @@ func (service *Service) Delete(id int) (bool, error) {
 }
 
 // Get all active user activities for a specific user
-func (service *Service) GetActiveUserActivities(userID int) ([]UserActivity, error) {
+func (service *Service) GetActiveUserActivities(userID string) ([]UserActivity, error) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -142,7 +142,7 @@ func (service *Service) GetActiveUserActivities(userID int) ([]UserActivity, err
 }
 
 // Get all inactive user activities for a specific user
-func (service *Service) GetInactiveUserActivities(userID int) ([]UserActivity, error) {
+func (service *Service) GetInactiveUserActivities(userID string) ([]UserActivity, error) {
 	service.Lock()
 	defer service.Unlock()
 
