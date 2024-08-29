@@ -2,6 +2,7 @@ package activity_locations
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/jackc/pgx/v4"
@@ -35,15 +36,17 @@ func (service *Service) Create(location ActivityLocation) (ActivityLocation, err
 	service.Lock()
 	defer service.Unlock()
 
-	_, err := service.db.Exec(
+	var id int
+	err := service.db.QueryRow(
 		context.Background(),
-		"INSERT INTO activity_locations (name, address, city, state, zip_code, country, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		"INSERT INTO activity_locations (name, address, city, state, zip_code, country, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
 		location.Name, location.Address, location.City, location.State, location.ZipCode, location.Country, location.Latitude, location.Longitude,
-	)
+	).Scan(&id)
 	if err != nil {
 		return ActivityLocation{}, err
 	}
 
+	location.ID = id
 	return location, nil
 }
 
@@ -100,6 +103,7 @@ func (service *Service) Update(id string, location ActivityLocation) (ActivityLo
 		return ActivityLocation{}, false, nil
 	}
 
+	location.ID, _ = strconv.Atoi(id)
 	return location, true, nil
 }
 

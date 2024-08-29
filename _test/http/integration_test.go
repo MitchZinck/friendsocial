@@ -41,8 +41,11 @@ type TestIDs struct {
 func TestIntegration(t *testing.T) {
 	// Defer the database wipe to ensure it runs at the end, even if tests fail
 	shouldWipeDatabase := true
+	ids := TestIDs{}
 	defer func() {
 		if shouldWipeDatabase {
+			// Perform delete tests here, right before wiping the database
+			deleteAllEntities(t, ids)
 			postgres.InitDB()
 			defer postgres.CloseDB()
 
@@ -52,8 +55,6 @@ func TestIntegration(t *testing.T) {
 			}
 		}
 	}()
-
-	ids := TestIDs{}
 
 	// Test user endpoints
 	user1 := testUserEndpoints(t)
@@ -87,9 +88,6 @@ func TestIntegration(t *testing.T) {
 
 	// Test user activity endpoints
 	ids.UserActivityID = testUserActivityEndpoints(t, user1.ID, activity.ID)
-
-	// Perform delete tests here, right before wiping the database
-	deleteAllEntities(t, ids)
 }
 
 // wipeDatabase deletes all data from the tables
@@ -285,6 +283,7 @@ func testActivityEndpoints(t *testing.T, locationID int) activities.Activity {
 
 		// Update
 		updatedActivity = activities.Activity{
+			ID:            createdActivity.ID,
 			Name:          "Updated Test Activity",
 			Description:   "This is an updated test activity",
 			EstimatedTime: "3 hours",
@@ -315,7 +314,11 @@ func testUserActivityPreferenceEndpoints(t *testing.T, userID, activityID int) i
 
 		// Update
 		updatedPreference := user_activity_preferences.UserActivityPreference{
-			Frequency: 3,
+			ID:              createdPreference.ID,
+			UserID:          userID,
+			ActivityID:      activityID,
+			Frequency:       3,
+			FrequencyPeriod: "month",
 		}
 		testUpdateUserActivityPreference(t, fmt.Sprintf("%d", createdPreference.ID), updatedPreference)
 	})
@@ -340,7 +343,10 @@ func testUserActivityEndpoints(t *testing.T, userID, activityID int) int {
 
 		// Update
 		updatedUserActivity := user_activities.UserActivity{
-			IsActive: false,
+			ID:         createdUserActivity.ID,
+			UserID:     userID,
+			ActivityID: activityID,
+			IsActive:   false,
 		}
 		testUpdateUserActivity(t, fmt.Sprintf("%d", createdUserActivity.ID), updatedUserActivity)
 	})
@@ -369,7 +375,12 @@ func testManualActivityEndpoints(t *testing.T, userID int) int {
 
 		// Update
 		updatedManualActivity := manual_activities.ManualActivity{
-			Name: "Updated Test Manual Activity",
+			ID:            createdManualActivity.ID,
+			UserID:        userID,
+			Name:          "Updated Test Manual Activity",
+			Description:   &description,
+			EstimatedTime: &estimatedTime,
+			IsActive:      false,
 		}
 		testUpdateManualActivity(t, fmt.Sprintf("%d", createdManualActivity.ID), updatedManualActivity)
 	})
@@ -413,7 +424,11 @@ func testActivityParticipantEndpoints(t *testing.T, userID, activityID int) int 
 
 		// Update
 		updatedParticipant := activity_participants.ActivityParticipant{
-			IsActive: false,
+			ID:         createdParticipant.ID,
+			UserID:     userID,
+			ActivityID: &activityID,
+			IsCreator:  false,
+			IsActive:   false,
 		}
 		testUpdateActivityParticipant(t, fmt.Sprintf("%d", createdParticipant.ID), updatedParticipant)
 	})
@@ -499,7 +514,8 @@ func testDeleteUserAvailability(t *testing.T, id string) {
 func testCreateActivity(t *testing.T, activity activities.Activity) activities.Activity {
 	resp, body := makeRequest(t, "POST", "/activity", activity)
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("Expected status Created, got %v", resp.Status)
+		t.Logf("Failed to create activity. Activity: %+v", activity)
+		t.Fatalf("Expected status Created, got %v. Response body: %s", resp.Status, string(body))
 	}
 
 	var createdActivity activities.Activity
@@ -509,16 +525,16 @@ func testCreateActivity(t *testing.T, activity activities.Activity) activities.A
 	}
 
 	if createdActivity.ID == 0 {
-		t.Fatalf("Created activity ID is 0")
+		t.Fatalf("Created activity has ID 0. Activity: %+v", activity)
 	}
 
 	return createdActivity
 }
 
 func testGetActivity(t *testing.T, activityID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity/%s", activityID), nil)
+	resp, body := makeRequest(t, "GET", fmt.Sprintf("/activity/%s", activityID), nil)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
@@ -545,9 +561,9 @@ func testDeleteActivity(t *testing.T, activityID string) {
 }
 
 func testCreateUserActivityPreference(t *testing.T, preference user_activity_preferences.UserActivityPreference) user_activity_preferences.UserActivityPreference {
-	resp, body := makeRequest(t, "POST", "/user_activity_preferences", preference)
+	resp, body := makeRequest(t, "POST", "/user_activity_preference", preference)
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("Expected status Created, got %v", resp.Status)
+		t.Fatalf("Expected status Created, got %v. Response body: %s", resp.Status, string(body))
 	}
 
 	var createdPreference user_activity_preferences.UserActivityPreference
@@ -564,28 +580,28 @@ func testCreateUserActivityPreference(t *testing.T, preference user_activity_pre
 }
 
 func testGetUserActivityPreference(t *testing.T, preferenceID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/user_activity_preferences/%s", preferenceID), nil)
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/user_activity_preference/%s", preferenceID), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
 func testUpdateUserActivityPreference(t *testing.T, preferenceID string, updates user_activity_preferences.UserActivityPreference) {
-	resp, _ := makeRequest(t, "PUT", fmt.Sprintf("/user_activity_preferences/%s", preferenceID), updates)
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/user_activity_preference/%s", preferenceID), updates)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
 func testDeleteUserActivityPreference(t *testing.T, preferenceID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/user_activity_preferences/%s", preferenceID), nil)
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/user_activity_preference/%s", preferenceID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}
 }
 
 func testCreateUserActivity(t *testing.T, userActivity user_activities.UserActivity) user_activities.UserActivity {
-	resp, body := makeRequest(t, "POST", "/user_activities", userActivity)
+	resp, body := makeRequest(t, "POST", "/user_activity", userActivity)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected status Created, got %v", resp.Status)
 	}
@@ -604,30 +620,30 @@ func testCreateUserActivity(t *testing.T, userActivity user_activities.UserActiv
 }
 
 func testGetUserActivity(t *testing.T, userActivityID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/user_activities/%s", userActivityID), nil)
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/user_activity/%s", userActivityID), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
 func testUpdateUserActivity(t *testing.T, userActivityID string, updates user_activities.UserActivity) {
-	resp, _ := makeRequest(t, "PUT", fmt.Sprintf("/user_activities/%s", userActivityID), updates)
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/user_activity/%s", userActivityID), updates)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
 func testDeleteUserActivity(t *testing.T, userActivityID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/user_activities/%s", userActivityID), nil)
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/user_activity/%s", userActivityID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}
 }
 
 func testCreateManualActivity(t *testing.T, manualActivity manual_activities.ManualActivity) manual_activities.ManualActivity {
-	resp, body := makeRequest(t, "POST", "/manual_activities", manualActivity)
+	resp, body := makeRequest(t, "POST", "/manual_activity", manualActivity)
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("Expected status Created, got %v", resp.Status)
+		t.Fatalf("Expected status Created, got %v. Response body: %s", resp.Status, string(body))
 	}
 
 	var createdManualActivity manual_activities.ManualActivity
@@ -644,21 +660,21 @@ func testCreateManualActivity(t *testing.T, manualActivity manual_activities.Man
 }
 
 func testGetManualActivity(t *testing.T, manualActivityID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/manual_activities/%s", manualActivityID), nil)
+	resp, body := makeRequest(t, "GET", fmt.Sprintf("/manual_activity/%s", manualActivityID), nil)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
 func testUpdateManualActivity(t *testing.T, manualActivityID string, updates manual_activities.ManualActivity) {
-	resp, _ := makeRequest(t, "PUT", fmt.Sprintf("/manual_activities/%s", manualActivityID), updates)
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/manual_activity/%s", manualActivityID), updates)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
 func testDeleteManualActivity(t *testing.T, manualActivityID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/manual_activities/%s", manualActivityID), nil)
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/manual_activity/%s", manualActivityID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}
@@ -694,7 +710,7 @@ func testDeleteFriend(t *testing.T, userID, friendID string) {
 }
 
 func testCreateActivityParticipant(t *testing.T, participant activity_participants.ActivityParticipant) activity_participants.ActivityParticipant {
-	resp, body := makeRequest(t, "POST", "/activity_participants", participant)
+	resp, body := makeRequest(t, "POST", "/activity_participant", participant)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected status Created, got %v", resp.Status)
 	}
@@ -713,28 +729,28 @@ func testCreateActivityParticipant(t *testing.T, participant activity_participan
 }
 
 func testGetActivityParticipant(t *testing.T, participantID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity_participants/%s", participantID), nil)
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity_participant/%s", participantID), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
 func testUpdateActivityParticipant(t *testing.T, participantID string, updates activity_participants.ActivityParticipant) {
-	resp, _ := makeRequest(t, "PUT", fmt.Sprintf("/activity_participants/%s", participantID), updates)
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/activity_participant/%s", participantID), updates)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v", resp.Status)
+		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
 	}
 }
 
 func testDeleteActivityParticipant(t *testing.T, participantID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/activity_participants/%s", participantID), nil)
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/activity_participant/%s", participantID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}
 }
 
 func testCreateActivityLocation(t *testing.T, location activity_locations.ActivityLocation) activity_locations.ActivityLocation {
-	resp, body := makeRequest(t, "POST", "/activity_locations", location)
+	resp, body := makeRequest(t, "POST", "/activity_location", location)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected status Created, got %v", resp.Status)
 	}
@@ -746,6 +762,7 @@ func testCreateActivityLocation(t *testing.T, location activity_locations.Activi
 	}
 
 	if createdLocation.ID == 0 {
+		t.Logf("Created activity location ID is 0. Response body: %s", string(body))
 		t.Fatalf("Created activity location ID is 0")
 	}
 
@@ -753,14 +770,14 @@ func testCreateActivityLocation(t *testing.T, location activity_locations.Activi
 }
 
 func testGetActivityLocation(t *testing.T, locationID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity_locations/%s", locationID), nil)
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity_location/%s", locationID), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
 func testUpdateActivityLocation(t *testing.T, locationID string, updates activity_locations.ActivityLocation) activity_locations.ActivityLocation {
-	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/activity_locations/%s", locationID), updates)
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/activity_location/%s", locationID), updates)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
@@ -775,7 +792,7 @@ func testUpdateActivityLocation(t *testing.T, locationID string, updates activit
 }
 
 func testDeleteActivityLocation(t *testing.T, locationID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/activity_locations/%s", locationID), nil)
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/activity_location/%s", locationID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}

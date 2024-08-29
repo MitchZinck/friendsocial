@@ -31,15 +31,17 @@ func (activityService *Service) Create(activity Activity) (Activity, error) {
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	_, err := activityService.db.Exec(
+	var activityID int
+	err := activityService.db.QueryRow(
 		context.Background(),
-		"INSERT INTO activities (name, description, estimated_time, location_id) VALUES ($1, $2, $3, $4)",
+		"INSERT INTO activities (name, description, estimated_time, location_id) VALUES ($1, $2, $3, $4) RETURNING id",
 		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID,
-	)
+	).Scan(&activityID)
 	if err != nil {
 		return Activity{}, err
 	}
 
+	activity.ID = activityID
 	return activity, nil
 }
 
@@ -47,7 +49,7 @@ func (activityService *Service) ReadAll() ([]Activity, error) {
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	rows, err := activityService.db.Query(context.Background(), "SELECT id, name, description, estimated_time, location_id FROM activities")
+	rows, err := activityService.db.Query(context.Background(), "SELECT id, name, description, estimated_time::text, location_id FROM activities")
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +72,10 @@ func (activityService *Service) Read(id string) (Activity, bool, error) {
 	defer activityService.Unlock()
 
 	var activity Activity
-	err := activityService.db.QueryRow(context.Background(), "SELECT id, name, description, estimated_time, location_id FROM activities WHERE id = $1", id).Scan(&activity.ID, &activity.Name, &activity.Description, &activity.EstimatedTime, &activity.LocationID)
+	err := activityService.db.QueryRow(context.Background(),
+		`SELECT id, name, description, estimated_time::text, location_id 
+		FROM activities 
+		WHERE id = $1`, id).Scan(&activity.ID, &activity.Name, &activity.Description, &activity.EstimatedTime, &activity.LocationID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Activity{}, false, nil

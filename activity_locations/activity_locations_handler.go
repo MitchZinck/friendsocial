@@ -33,6 +33,7 @@ func NewActivityLocationHTTPHandler(activityLocationService ActivityLocationServ
 }
 
 // HandleHTTPPost handles the creation of a new Activity Location
+//
 //	@Summary		Create a new Activity Location
 //	@Description	Create a new Activity Location
 //	@Tags			activity_locations
@@ -42,7 +43,7 @@ func NewActivityLocationHTTPHandler(activityLocationService ActivityLocationServ
 //	@Success		201					{object}	ActivityLocation
 //	@Failure		400					{object}	ActivityLocationError
 //	@Failure		500					{object}	ActivityLocationError
-//	@Router			/activity-locations [post]
+//	@Router			/activity_location [post]
 func (aH *ActivityLocationHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Request) {
 	var activityLocation ActivityLocation
 	err := json.NewDecoder(r.Body).Decode(&activityLocation)
@@ -67,6 +68,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *
 }
 
 // HandleHTTPGet handles retrieving all Activity Locations
+//
 //	@Summary		Get all Activity Locations
 //	@Description	Get all Activity Locations
 //	@Tags			activity_locations
@@ -75,7 +77,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *
 //	@Success		200	{array}		ActivityLocation
 //	@Failure		400	{object}	ActivityLocationError
 //	@Failure		500	{object}	ActivityLocationError
-//	@Router			/activity-locations [get]
+//	@Router			/activity_locations [get]
 func (aH *ActivityLocationHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
 	activityLocations, err := aH.activityLocationService.ReadAll()
 	if err != nil {
@@ -92,6 +94,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *h
 }
 
 // HandleHTTPGetWithID handles retrieving a single Activity Location by ID
+//
 //	@Summary		Get an Activity Location by ID
 //	@Description	Get a specific Activity Location by ID
 //	@Tags			activity_locations
@@ -102,7 +105,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *h
 //	@Failure		400	{object}	ActivityLocationError
 //	@Failure		404	{object}	ActivityLocationError
 //	@Failure		500	{object}	ActivityLocationError
-//	@Router			/activity-locations/{id} [get]
+//	@Router			/activity_location/{id} [get]
 func (aH *ActivityLocationHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -126,6 +129,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter
 }
 
 // HandleHTTPPut handles updating an existing Activity Location by ID
+//
 //	@Summary		Update an existing Activity Location
 //	@Description	Update an existing Activity Location by ID
 //	@Tags			activity_locations
@@ -137,7 +141,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter
 //	@Failure		400					{object}	ActivityLocationError
 //	@Failure		404					{object}	ActivityLocationError
 //	@Failure		500					{object}	ActivityLocationError
-//	@Router			/activity-locations/{id} [put]
+//	@Router			/activity_location/{id} [put]
 func (aH *ActivityLocationHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -168,6 +172,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *h
 }
 
 // HandleHTTPDelete handles deleting an Activity Location by ID
+//
 //	@Summary		Delete an Activity Location
 //	@Description	Delete an Activity Location by ID
 //	@Tags			activity_locations
@@ -176,7 +181,7 @@ func (aH *ActivityLocationHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *h
 //	@Failure		400	{object}	ActivityLocationError
 //	@Failure		404	{object}	ActivityLocationError
 //	@Failure		500	{object}	ActivityLocationError
-//	@Router			/activity-locations/{id} [delete]
+//	@Router			/activity_location/{id} [delete]
 func (aH *ActivityLocationHTTPHandler) HandleHTTPDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 

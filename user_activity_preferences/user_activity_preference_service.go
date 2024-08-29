@@ -30,16 +30,17 @@ func NewService(db *pgxpool.Pool) *Service {
 func (s *Service) Create(preference UserActivityPreference) (UserActivityPreference, error) {
 	s.Lock()
 	defer s.Unlock()
-
-	_, err := s.db.Exec(
+	var id int
+	err := s.db.QueryRow(
 		context.Background(),
 		`INSERT INTO user_activity_preferences (user_id, activity_id, frequency, frequency_period) 
-		 VALUES ($1, $2, $3, $4)`,
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
 		preference.UserID, preference.ActivityID, preference.Frequency, preference.FrequencyPeriod,
-	)
+	).Scan(&id)
 	if err != nil {
 		return UserActivityPreference{}, err
 	}
+	preference.ID = id
 
 	return preference, nil
 }

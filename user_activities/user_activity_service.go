@@ -31,15 +31,17 @@ func (service *Service) Create(userActivity UserActivity) (UserActivity, error) 
 	service.Lock()
 	defer service.Unlock()
 
-	_, err := service.db.Exec(
+	var id int
+	err := service.db.QueryRow(
 		context.Background(),
-		"INSERT INTO user_activities (user_id, activity_id, is_active) VALUES ($1, $2, $3)",
+		"INSERT INTO user_activities (user_id, activity_id, is_active) VALUES ($1, $2, $3) RETURNING id",
 		userActivity.UserID, userActivity.ActivityID, userActivity.IsActive,
-	)
+	).Scan(&id)
 	if err != nil {
 		return UserActivity{}, err
 	}
 
+	userActivity.ID = id
 	return userActivity, nil
 }
 
