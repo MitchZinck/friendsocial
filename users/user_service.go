@@ -10,10 +10,11 @@ import (
 )
 
 type User struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	LocationID *int   `json:"location_id,omitempty"`
 }
 
 type Service struct {
@@ -34,8 +35,8 @@ func (userService *Service) Create(user User) (User, error) {
 	var userID int
 	err := userService.db.QueryRow(
 		context.Background(),
-		"INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id",
-		user.Name, user.Email, user.Password,
+		"INSERT INTO users (name, email, password, location_id) VALUES ($1, $2, $3, $4) RETURNING id",
+		user.Name, user.Email, user.Password, user.LocationID,
 	).Scan(&userID)
 	if err != nil {
 		return User{}, err
@@ -89,7 +90,7 @@ func (userService *Service) Update(id string, user User) (User, bool, error) {
 	userService.Lock()
 	defer userService.Unlock()
 
-	cmdTag, err := userService.db.Exec(context.Background(), "UPDATE users SET name = $1, email = $2, password = $3 WHERE id = $4", user.Name, user.Email, user.Password, id)
+	cmdTag, err := userService.db.Exec(context.Background(), "UPDATE users SET name = $1, email = $2, password = $3, location_id = $4 WHERE id = $5", user.Name, user.Email, user.Password, user.LocationID, id)
 	if err != nil {
 		return User{}, false, err
 	}

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"friendsocial/activities"
-	"friendsocial/activity_locations"
 	"friendsocial/activity_participants"
 	"friendsocial/friends"
+	"friendsocial/locations"
 	"friendsocial/manual_activities"
 	"friendsocial/postgres"
 	"friendsocial/user_activities"
@@ -30,7 +30,7 @@ type TestIDs struct {
 	UserID                   int
 	UserAvailabilityID       int
 	FriendID                 int
-	ActivityLocationID       int
+	LocationIDs              []int
 	ActivityID               int
 	UserActivityPreferenceID int
 	ManualActivityID         int
@@ -56,12 +56,15 @@ func TestIntegration(t *testing.T) {
 		}
 	}()
 
+	// Create a set of locations to use throughout the tests
+	ids.LocationIDs = createTestLocations(t)
+
 	// Test user endpoints
-	user1 := testUserEndpoints(t)
+	user1 := testUserEndpoints(t, ids.LocationIDs[0])
 	ids.UserID = user1.ID
 
 	// Create a second user
-	user2 := testUserEndpoints(t)
+	user2 := testUserEndpoints(t, ids.LocationIDs[1])
 
 	// Test friend endpoints
 	ids.FriendID = testFriendEndpoints(t, user1.ID, user2.ID)
@@ -69,12 +72,8 @@ func TestIntegration(t *testing.T) {
 	// Test user availability endpoints
 	ids.UserAvailabilityID = testUserAvailabilityEndpoints(t, user1.ID)
 
-	// Test activity location endpoints
-	activityLocation := testActivityLocationEndpoints(t)
-	ids.ActivityLocationID = activityLocation.ID
-
 	// Test activity endpoints
-	activity := testActivityEndpoints(t, activityLocation.ID)
+	activity := testActivityEndpoints(t, ids.LocationIDs[2])
 	ids.ActivityID = activity.ID
 
 	// Test user activity preference endpoints
@@ -100,8 +99,8 @@ func wipeDatabase(db *pgxpool.Pool) error {
 		"friends",
 		"user_activities",
 		"activities",
-		"activity_locations",
 		"users",
+		"locations",
 	}
 	fmt.Printf("Wiping tables: %v\n", tables)
 
@@ -123,23 +122,26 @@ func deleteAllEntities(t *testing.T, ids TestIDs) {
 		testDeleteManualActivity(t, fmt.Sprintf("%d", ids.ManualActivityID))
 		testDeleteUserActivityPreference(t, fmt.Sprintf("%d", ids.UserActivityPreferenceID))
 		testDeleteActivity(t, fmt.Sprintf("%d", ids.ActivityID))
-		testDeleteActivityLocation(t, fmt.Sprintf("%d", ids.ActivityLocationID))
 		testDeleteFriend(t, fmt.Sprintf("%d", ids.UserID), fmt.Sprintf("%d", ids.FriendID))
 		testDeleteUserAvailability(t, fmt.Sprintf("%d", ids.UserAvailabilityID))
 		testDeleteUser(t, fmt.Sprintf("%d", ids.UserID))
 		testDeleteUser(t, fmt.Sprintf("%d", ids.FriendID))
+		for _, locationID := range ids.LocationIDs {
+			testDeleteLocation(t, fmt.Sprintf("%d", locationID))
+		}
 	})
 }
 
-func testUserEndpoints(t *testing.T) users.User {
+func testUserEndpoints(t *testing.T, locationID int) users.User {
 	var updatedUser users.User
 
 	t.Run("User Endpoints", func(t *testing.T) {
 		// Test creating a user
 		user := users.User{
-			Name:     "Test User",
-			Email:    fmt.Sprintf("testuser%d@example.com", time.Now().UnixNano()),
-			Password: "testpassword",
+			Name:       "Test User",
+			Email:      fmt.Sprintf("testuser%d@example.com", time.Now().UnixNano()),
+			Password:   "testpassword",
+			LocationID: &locationID,
 		}
 		createdUser := testCreateUser(t, user)
 
@@ -147,10 +149,12 @@ func testUserEndpoints(t *testing.T) users.User {
 		testGetUser(t, fmt.Sprintf("%d", createdUser.ID))
 
 		// Test full update of the user
+		updatedLocationID := locationID + 1
 		updatedUserData := users.User{
-			Name:     "Updated Test User",
-			Email:    fmt.Sprintf("updatedtestuser%d@example.com", time.Now().UnixNano()),
-			Password: "updatedtestpassword",
+			Name:       "Updated Test User",
+			Email:      fmt.Sprintf("updatedtestuser%d@example.com", time.Now().UnixNano()),
+			Password:   "updatedtestpassword",
+			LocationID: &updatedLocationID,
 		}
 		updatedUser = testUpdateUser(t, fmt.Sprintf("%d", createdUser.ID), updatedUserData)
 
@@ -329,9 +333,10 @@ func testUserActivityEndpoints(t *testing.T, userID, activityID int) int {
 	var createdUserActivityID int
 	t.Run("User Activity Endpoints", func(t *testing.T) {
 		userActivity := user_activities.UserActivity{
-			UserID:     userID,
-			ActivityID: activityID,
-			IsActive:   true,
+			UserID:      userID,
+			ActivityID:  activityID,
+			IsActive:    true,
+			ScheduledAt: time.Now().Add(24 * time.Hour), // Set scheduled_at to 24 hours in the future
 		}
 
 		// Create
@@ -343,10 +348,11 @@ func testUserActivityEndpoints(t *testing.T, userID, activityID int) int {
 
 		// Update
 		updatedUserActivity := user_activities.UserActivity{
-			ID:         createdUserActivity.ID,
-			UserID:     userID,
-			ActivityID: activityID,
-			IsActive:   false,
+			ID:          createdUserActivity.ID,
+			UserID:      userID,
+			ActivityID:  activityID,
+			IsActive:    false,
+			ScheduledAt: time.Now().Add(48 * time.Hour), // Update scheduled_at to 48 hours in the future
 		}
 		testUpdateUserActivity(t, fmt.Sprintf("%d", createdUserActivity.ID), updatedUserActivity)
 	})
@@ -363,6 +369,7 @@ func testManualActivityEndpoints(t *testing.T, userID int) int {
 			Name:          "Test Manual Activity",
 			Description:   &description,
 			EstimatedTime: &estimatedTime,
+			ScheduledAt:   time.Now().Add(24 * time.Hour),
 			IsActive:      true,
 		}
 
@@ -380,6 +387,7 @@ func testManualActivityEndpoints(t *testing.T, userID int) int {
 			Name:          "Updated Test Manual Activity",
 			Description:   &description,
 			EstimatedTime: &estimatedTime,
+			ScheduledAt:   time.Now().Add(48 * time.Hour),
 			IsActive:      false,
 		}
 		testUpdateManualActivity(t, fmt.Sprintf("%d", createdManualActivity.ID), updatedManualActivity)
@@ -435,42 +443,52 @@ func testActivityParticipantEndpoints(t *testing.T, userID, activityID int) int 
 	return createdParticipantID
 }
 
-func testActivityLocationEndpoints(t *testing.T) activity_locations.ActivityLocation {
-	var updatedLocation activity_locations.ActivityLocation
-
-	t.Run("Activity Location Endpoints", func(t *testing.T) {
-		location := activity_locations.ActivityLocation{
-			Name:      "Test Location",
+func createTestLocations(t *testing.T) []int {
+	locations := []locations.Location{
+		{
+			Name:      "Test Location 1",
 			Address:   "123 Test St",
-			City:      "Test City",
-			State:     "TS",
+			City:      "Test City 1",
+			State:     "TS1",
 			ZipCode:   "12345",
-			Country:   "Test Country",
+			Country:   "Test Country 1",
 			Latitude:  40.7128,
 			Longitude: -74.0060,
-		}
-
-		// Create
-		createdLocation := testCreateActivityLocation(t, location)
-
-		// Read
-		testGetActivityLocation(t, fmt.Sprintf("%d", createdLocation.ID))
-
-		// Update
-		updatedLocation = activity_locations.ActivityLocation{
-			Name:      "Updated Test Location",
-			Address:   "456 Updated St",
-			City:      "Updated City",
-			State:     "US",
+		},
+		{
+			Name:      "Test Location 2",
+			Address:   "456 Test Ave",
+			City:      "Test City 2",
+			State:     "TS2",
 			ZipCode:   "67890",
-			Country:   "Updated Country",
+			Country:   "Test Country 2",
 			Latitude:  34.0522,
 			Longitude: -118.2437,
-		}
-		updatedLocation = testUpdateActivityLocation(t, fmt.Sprintf("%d", createdLocation.ID), updatedLocation)
-	})
+		},
+		{
+			Name:      "Test Location 3",
+			Address:   "789 Test Blvd",
+			City:      "Test City 3",
+			State:     "TS3",
+			ZipCode:   "13579",
+			Country:   "Test Country 3",
+			Latitude:  41.8781,
+			Longitude: -87.6298,
+		},
+	}
 
-	return updatedLocation
+	var locationIDs []int
+	for _, loc := range locations {
+		createdLocation := testCreateLocation(t, loc)
+		locationIDs = append(locationIDs, createdLocation.ID)
+
+		testGetLocation(t, fmt.Sprintf("%d", createdLocation.ID))
+
+		loc.Name = loc.Name + " Updated"
+		testUpdateLocation(t, fmt.Sprintf("%d", createdLocation.ID), loc)
+	}
+
+	return locationIDs
 }
 
 // Helper functions for each endpoint
@@ -749,40 +767,40 @@ func testDeleteActivityParticipant(t *testing.T, participantID string) {
 	}
 }
 
-func testCreateActivityLocation(t *testing.T, location activity_locations.ActivityLocation) activity_locations.ActivityLocation {
-	resp, body := makeRequest(t, "POST", "/activity_location", location)
+func testCreateLocation(t *testing.T, location locations.Location) locations.Location {
+	resp, body := makeRequest(t, "POST", "/location", location)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected status Created, got %v", resp.Status)
 	}
 
-	var createdLocation activity_locations.ActivityLocation
+	var createdLocation locations.Location
 	err := json.Unmarshal(body, &createdLocation)
 	if err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
 	if createdLocation.ID == 0 {
-		t.Logf("Created activity location ID is 0. Response body: %s", string(body))
-		t.Fatalf("Created activity location ID is 0")
+		t.Logf("Created location ID is 0. Response body: %s", string(body))
+		t.Fatalf("Created location ID is 0")
 	}
 
 	return createdLocation
 }
 
-func testGetActivityLocation(t *testing.T, locationID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/activity_location/%s", locationID), nil)
+func testGetLocation(t *testing.T, locationID string) {
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/location/%s", locationID), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
-func testUpdateActivityLocation(t *testing.T, locationID string, updates activity_locations.ActivityLocation) activity_locations.ActivityLocation {
-	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/activity_location/%s", locationID), updates)
+func testUpdateLocation(t *testing.T, locationID string, updates locations.Location) locations.Location {
+	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/location/%s", locationID), updates)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 
-	var updatedLocation activity_locations.ActivityLocation
+	var updatedLocation locations.Location
 	err := json.Unmarshal(body, &updatedLocation)
 	if err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
@@ -791,8 +809,8 @@ func testUpdateActivityLocation(t *testing.T, locationID string, updates activit
 	return updatedLocation
 }
 
-func testDeleteActivityLocation(t *testing.T, locationID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/activity_location/%s", locationID), nil)
+func testDeleteLocation(t *testing.T, locationID string) {
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/location/%s", locationID), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}

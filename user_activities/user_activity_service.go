@@ -3,16 +3,18 @@ package user_activities
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type UserActivity struct {
-	ID         int  `json:"id"`
-	UserID     int  `json:"user_id"`
-	ActivityID int  `json:"activity_id"`
-	IsActive   bool `json:"is_active"`
+	ID          int       `json:"id"`
+	UserID      int       `json:"user_id"`
+	ActivityID  int       `json:"activity_id"`
+	IsActive    bool      `json:"is_active"`
+	ScheduledAt time.Time `json:"scheduled_at"` // New field for scheduled_at
 }
 
 type Service struct {
@@ -34,8 +36,8 @@ func (service *Service) Create(userActivity UserActivity) (UserActivity, error) 
 	var id int
 	err := service.db.QueryRow(
 		context.Background(),
-		"INSERT INTO user_activities (user_id, activity_id, is_active) VALUES ($1, $2, $3) RETURNING id",
-		userActivity.UserID, userActivity.ActivityID, userActivity.IsActive,
+		"INSERT INTO user_activities (user_id, activity_id, is_active, scheduled_at) VALUES ($1, $2, $3, $4) RETURNING id",
+		userActivity.UserID, userActivity.ActivityID, userActivity.IsActive, userActivity.ScheduledAt,
 	).Scan(&id)
 	if err != nil {
 		return UserActivity{}, err
@@ -50,7 +52,7 @@ func (service *Service) ReadAll(userID string) ([]UserActivity, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active FROM user_activities WHERE user_id = $1", userID)
+	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active, scheduled_at FROM user_activities WHERE user_id = $1", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func (service *Service) ReadAll(userID string) ([]UserActivity, error) {
 	var userActivities []UserActivity
 	for rows.Next() {
 		var userActivity UserActivity
-		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive); err != nil {
+		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive, &userActivity.ScheduledAt); err != nil {
 			return nil, err
 		}
 		userActivities = append(userActivities, userActivity)
@@ -74,7 +76,7 @@ func (service *Service) Read(id string) (UserActivity, bool, error) {
 	defer service.Unlock()
 
 	var userActivity UserActivity
-	err := service.db.QueryRow(context.Background(), "SELECT id, user_id, activity_id, is_active FROM user_activities WHERE id = $1", id).Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive)
+	err := service.db.QueryRow(context.Background(), "SELECT id, user_id, activity_id, is_active, scheduled_at FROM user_activities WHERE id = $1", id).Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive, &userActivity.ScheduledAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return UserActivity{}, false, nil
@@ -90,8 +92,8 @@ func (service *Service) Update(id string, userActivity UserActivity) (UserActivi
 	service.Lock()
 	defer service.Unlock()
 
-	cmdTag, err := service.db.Exec(context.Background(), "UPDATE user_activities SET user_id = $1, activity_id = $2, is_active = $3 WHERE id = $4",
-		userActivity.UserID, userActivity.ActivityID, userActivity.IsActive, id)
+	cmdTag, err := service.db.Exec(context.Background(), "UPDATE user_activities SET user_id = $1, activity_id = $2, is_active = $3, scheduled_at = $4 WHERE id = $5",
+		userActivity.UserID, userActivity.ActivityID, userActivity.IsActive, userActivity.ScheduledAt, id)
 	if err != nil {
 		return UserActivity{}, false, err
 	}
@@ -125,7 +127,7 @@ func (service *Service) GetActiveUserActivities(userID string) ([]UserActivity, 
 	service.Lock()
 	defer service.Unlock()
 
-	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active FROM user_activities WHERE user_id = $1 AND is_active = TRUE", userID)
+	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active, scheduled_at FROM user_activities WHERE user_id = $1 AND is_active = TRUE", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +136,7 @@ func (service *Service) GetActiveUserActivities(userID string) ([]UserActivity, 
 	var activeUserActivities []UserActivity
 	for rows.Next() {
 		var userActivity UserActivity
-		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive); err != nil {
+		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive, &userActivity.ScheduledAt); err != nil {
 			return nil, err
 		}
 		activeUserActivities = append(activeUserActivities, userActivity)
@@ -148,7 +150,7 @@ func (service *Service) GetInactiveUserActivities(userID string) ([]UserActivity
 	service.Lock()
 	defer service.Unlock()
 
-	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active FROM user_activities WHERE user_id = $1 AND is_active = FALSE", userID)
+	rows, err := service.db.Query(context.Background(), "SELECT id, user_id, activity_id, is_active, scheduled_at FROM user_activities WHERE user_id = $1 AND is_active = FALSE", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +159,7 @@ func (service *Service) GetInactiveUserActivities(userID string) ([]UserActivity
 	var inactiveUserActivities []UserActivity
 	for rows.Next() {
 		var userActivity UserActivity
-		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive); err != nil {
+		if err := rows.Scan(&userActivity.ID, &userActivity.UserID, &userActivity.ActivityID, &userActivity.IsActive, &userActivity.ScheduledAt); err != nil {
 			return nil, err
 		}
 		inactiveUserActivities = append(inactiveUserActivities, userActivity)

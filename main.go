@@ -3,16 +3,21 @@ package main
 import (
 	"net/http"
 
+	"database/sql"
 	"friendsocial/activities"
-	"friendsocial/activity_locations"
 	"friendsocial/activity_participants"
 	"friendsocial/friends"
+	"friendsocial/locations"
 	"friendsocial/manual_activities"
 	"friendsocial/postgres"
 	"friendsocial/user_activities"
 	"friendsocial/user_activity_preferences"
 	"friendsocial/user_availability"
 	"friendsocial/users"
+	"log"
+	"time"
+
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -85,14 +90,14 @@ func main() {
 	mux.HandleFunc("PUT /activity_participant/{id}", activityParticipantManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /activity_participant/{id}", activityParticipantManager.HandleHTTPDelete)
 
-	activityLocationService := activity_locations.NewService(postgres.DB)
-	activityLocationManager := activity_locations.NewActivityLocationHTTPHandler(activityLocationService)
+	locationService := locations.NewService(postgres.DB)
+	locationManager := locations.NewLocationHTTPHandler(locationService)
 
-	mux.HandleFunc("POST /activity_location", activityLocationManager.HandleHTTPPost)
-	mux.HandleFunc("GET /activity_locations", activityLocationManager.HandleHTTPGet)
-	mux.HandleFunc("GET /activity_location/{id}", activityLocationManager.HandleHTTPGetWithID)
-	mux.HandleFunc("PUT /activity_location/{id}", activityLocationManager.HandleHTTPPut)
-	mux.HandleFunc("DELETE /activity_location/{id}", activityLocationManager.HandleHTTPDelete)
+	mux.HandleFunc("POST /location", locationManager.HandleHTTPPost)
+	mux.HandleFunc("GET /locations", locationManager.HandleHTTPGet)
+	mux.HandleFunc("GET /location/{id}", locationManager.HandleHTTPGetWithID)
+	mux.HandleFunc("PUT /location/{id}", locationManager.HandleHTTPPut)
+	mux.HandleFunc("DELETE /location/{id}", locationManager.HandleHTTPDelete)
 
 	activityService := activities.NewService(postgres.DB)
 	activityManager := activities.NewActivityHTTPHandler(activityService)
@@ -107,4 +112,124 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Initialize the database connection
+	db, err := sql.Open("postgres", "user=youruser dbname=yourdb sslmode=disable")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	userID := 1 // Example user ID
+	err = scheduleCommonActivities(db, userID)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func scheduleCommonActivities(db *sql.DB, userID int) error {
+	// Step 1: Identify common activities between the user and their friends
+	query := `
+		SELECT a.id, a.name
+		FROM user_activity_preferences uap
+		JOIN activities a ON uap.activity_id = a.id
+		WHERE uap.user_id = $1
+		AND uap.activity_id IN (
+			SELECT uap2.activity_id
+			FROM friends f
+			JOIN user_activity_preferences uap2 ON f.friend_id = uap2.user_id
+			WHERE f.user_id = $1
+		)
+	`
+	rows, err := db.Query(query, userID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var activities []struct {
+		ID   int
+		Name string
+	}
+	for rows.Next() {
+		var activity struct {
+			ID   int
+			Name string
+		}
+		if err := rows.Scan(&activity.ID, &activity.Name); err != nil {
+			return err
+		}
+		activities = append(activities, activity)
+	}
+
+	// Step 2: Check for overlapping availability
+	for _, activity := range activities {
+		query := `
+			SELECT ua.user_id, ua.day_of_week, ua.start_time, ua.end_time
+			FROM user_availability ua
+			JOIN friends f ON ua.user_id = f.friend_id
+			WHERE f.user_id = $1
+			AND ua.day_of_week IN (
+				SELECT ua2.day_of_week
+				FROM user_availability ua2
+				WHERE ua2.user_id = $1
+			)
+			AND ua.start_time <= (
+				SELECT ua2.end_time
+				FROM user_availability ua2
+				WHERE ua2.user_id = $1
+				AND ua2.day_of_week = ua.day_of_week
+			)
+			AND ua.end_time >= (
+				SELECT ua2.start_time
+				FROM user_availability ua2
+				WHERE ua2.user_id = $1
+				AND ua2.day_of_week = ua.day_of_week
+			)
+		`
+		rows, err := db.Query(query, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		var availableFriends []int
+		for rows.Next() {
+			var friendID int
+			var dayOfWeek string
+			var startTime, endTime time.Time
+			if err := rows.Scan(&friendID, &dayOfWeek, &startTime, &endTime); err != nil {
+				return err
+			}
+			availableFriends = append(availableFriends, friendID)
+		}
+
+		// Step 3: Insert the identified activities into the user_activities table
+		if len(availableFriends) > 0 {
+			query := `
+				INSERT INTO user_activities (user_id, activity_id, is_active, scheduled_at)
+				VALUES ($1, $2, TRUE, NOW())
+				RETURNING id
+			`
+			var userActivityID int
+			err := db.QueryRow(query, userID, activity.ID).Scan(&userActivityID)
+			if err != nil {
+				return err
+			}
+
+			// Step 4: Link the participants by inserting entries into the activity_participants table
+			for _, friendID := range availableFriends {
+				query := `
+					INSERT INTO activity_participants (user_id, activity_id, is_creator, is_active)
+					VALUES ($1, $2, FALSE, TRUE)
+				`
+				_, err := db.Exec(query, friendID, activity.ID)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }

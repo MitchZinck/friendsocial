@@ -1,14 +1,4 @@
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    CONSTRAINT uq_email UNIQUE (email) -- Unique constraint on email
-);
-
-CREATE INDEX idx_users_email ON users (email); -- Index on email
-
-CREATE TABLE activity_locations (
+CREATE TABLE locations (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     address VARCHAR(255) NOT NULL,
@@ -20,6 +10,19 @@ CREATE TABLE activity_locations (
     longitude DECIMAL(9, 6)
 );
 
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    location_id INTEGER,
+    CONSTRAINT uq_email UNIQUE (email),
+    CONSTRAINT fk_location FOREIGN KEY (location_id) REFERENCES locations (id)
+);
+
+CREATE INDEX idx_users_email ON users (email);
+CREATE INDEX idx_users_location ON users (location_id);
+
 CREATE TABLE activities (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -27,7 +30,7 @@ CREATE TABLE activities (
     estimated_time INTERVAL NOT NULL,
     location_id INTEGER NOT NULL,
     CONSTRAINT fk_location_id FOREIGN KEY (location_id)
-    REFERENCES activity_locations (id)
+    REFERENCES locations (id)
 );
 
 CREATE TABLE user_activities (
@@ -35,6 +38,7 @@ CREATE TABLE user_activities (
     user_id INTEGER NOT NULL,
     activity_id INTEGER NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
+    scheduled_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_activity_id FOREIGN KEY (activity_id)
@@ -97,10 +101,10 @@ CREATE TABLE manual_activities (
     description TEXT NULL, -- nullable if description is optional
     estimated_time INTERVAL NULL, -- nullable to allow flexible time entries
     location_id INTEGER NULL,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    scheduled_at TIMESTAMPTZ NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_location_id FOREIGN KEY (location_id) REFERENCES activity_locations (id) ON DELETE SET NULL,
+    CONSTRAINT fk_location_id FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE SET NULL,
     CONSTRAINT fk_activity_id FOREIGN KEY (activity_id) REFERENCES activities (id)
 );
 

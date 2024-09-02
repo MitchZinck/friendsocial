@@ -1,4 +1,4 @@
-package activity_locations
+package locations
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type ActivityLocation struct {
+type Location struct {
 	ID        int     `json:"id"`
 	Name      string  `json:"name"`
 	Address   string  `json:"address"`
@@ -32,37 +32,37 @@ func NewService(db *pgxpool.Pool) *Service {
 	}
 }
 
-func (service *Service) Create(location ActivityLocation) (ActivityLocation, error) {
+func (service *Service) Create(location Location) (Location, error) {
 	service.Lock()
 	defer service.Unlock()
 
 	var id int
 	err := service.db.QueryRow(
 		context.Background(),
-		"INSERT INTO activity_locations (name, address, city, state, zip_code, country, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+		"INSERT INTO locations (name, address, city, state, zip_code, country, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
 		location.Name, location.Address, location.City, location.State, location.ZipCode, location.Country, location.Latitude, location.Longitude,
 	).Scan(&id)
 	if err != nil {
-		return ActivityLocation{}, err
+		return Location{}, err
 	}
 
 	location.ID = id
 	return location, nil
 }
 
-func (service *Service) ReadAll() ([]ActivityLocation, error) {
+func (service *Service) ReadAll() ([]Location, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	rows, err := service.db.Query(context.Background(), "SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM activity_locations")
+	rows, err := service.db.Query(context.Background(), "SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM locations")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var locations []ActivityLocation
+	var locations []Location
 	for rows.Next() {
-		var location ActivityLocation
+		var location Location
 		if err := rows.Scan(&location.ID, &location.Name, &location.Address, &location.City, &location.State, &location.ZipCode, &location.Country, &location.Latitude, &location.Longitude); err != nil {
 			return nil, err
 		}
@@ -72,35 +72,35 @@ func (service *Service) ReadAll() ([]ActivityLocation, error) {
 	return locations, nil
 }
 
-func (service *Service) Read(id string) (ActivityLocation, bool, error) {
+func (service *Service) Read(id string) (Location, bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	var location ActivityLocation
-	err := service.db.QueryRow(context.Background(), "SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM activity_locations WHERE id = $1", id).Scan(
+	var location Location
+	err := service.db.QueryRow(context.Background(), "SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM locations WHERE id = $1", id).Scan(
 		&location.ID, &location.Name, &location.Address, &location.City, &location.State, &location.ZipCode, &location.Country, &location.Latitude, &location.Longitude)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return ActivityLocation{}, false, nil
+			return Location{}, false, nil
 		}
-		return ActivityLocation{}, false, err
+		return Location{}, false, err
 	}
 
 	return location, true, nil
 }
 
-func (service *Service) Update(id string, location ActivityLocation) (ActivityLocation, bool, error) {
+func (service *Service) Update(id string, location Location) (Location, bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	cmdTag, err := service.db.Exec(context.Background(), "UPDATE activity_locations SET name = $1, address = $2, city = $3, state = $4, zip_code = $5, country = $6, latitude = $7, longitude = $8 WHERE id = $9",
+	cmdTag, err := service.db.Exec(context.Background(), "UPDATE locations SET name = $1, address = $2, city = $3, state = $4, zip_code = $5, country = $6, latitude = $7, longitude = $8 WHERE id = $9",
 		location.Name, location.Address, location.City, location.State, location.ZipCode, location.Country, location.Latitude, location.Longitude, id)
 	if err != nil {
-		return ActivityLocation{}, false, err
+		return Location{}, false, err
 	}
 
 	if cmdTag.RowsAffected() == 0 {
-		return ActivityLocation{}, false, nil
+		return Location{}, false, nil
 	}
 
 	location.ID, _ = strconv.Atoi(id)
@@ -111,7 +111,7 @@ func (service *Service) Delete(id string) (bool, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	cmdTag, err := service.db.Exec(context.Background(), "DELETE FROM activity_locations WHERE id = $1", id)
+	cmdTag, err := service.db.Exec(context.Background(), "DELETE FROM locations WHERE id = $1", id)
 	if err != nil {
 		return false, err
 	}
