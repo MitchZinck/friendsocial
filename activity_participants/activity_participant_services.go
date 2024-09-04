@@ -9,12 +9,9 @@ import (
 )
 
 type ActivityParticipant struct {
-	ID               int  `json:"id"`
-	UserID           int  `json:"user_id"`
-	ActivityID       *int `json:"activity_id,omitempty"`
-	ManualActivityID *int `json:"manual_activity_id,omitempty"`
-	IsCreator        bool `json:"is_creator"`
-	IsActive         bool `json:"is_active"`
+	ID                  int `json:"id"`
+	UserID              int `json:"user_id"`
+	ScheduledActivityID int `json:"scheduled_activity_id"`
 }
 
 type Service struct {
@@ -35,10 +32,10 @@ func (s *Service) Create(participant ActivityParticipant) (ActivityParticipant, 
 	err := s.db.QueryRow(
 		context.Background(),
 		`INSERT INTO activity_participants 
-		(user_id, activity_id, manual_activity_id, is_creator, is_active) 
-		VALUES ($1, $2, $3, $4, $5) 
+		(user_id, scheduled_activity_id) 
+		VALUES ($1, $2) 
 		RETURNING id`,
-		participant.UserID, participant.ActivityID, participant.ManualActivityID, participant.IsCreator, participant.IsActive,
+		participant.UserID, participant.ScheduledActivityID,
 	).Scan(&participant.ID)
 
 	if err != nil {
@@ -53,7 +50,7 @@ func (s *Service) ReadAll() ([]ActivityParticipant, error) {
 	defer s.Unlock()
 
 	rows, err := s.db.Query(context.Background(),
-		"SELECT id, user_id, activity_id, manual_activity_id, is_creator, is_active FROM activity_participants")
+		"SELECT id, user_id, scheduled_activity_id FROM activity_participants")
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +60,7 @@ func (s *Service) ReadAll() ([]ActivityParticipant, error) {
 	for rows.Next() {
 		var participant ActivityParticipant
 		err := rows.Scan(
-			&participant.ID, &participant.UserID, &participant.ActivityID, &participant.ManualActivityID,
-			&participant.IsCreator, &participant.IsActive)
+			&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
 		if err != nil {
 			return nil, err
 		}
@@ -81,10 +77,9 @@ func (s *Service) Read(id string) (ActivityParticipant, bool, error) {
 	var participant ActivityParticipant
 	err := s.db.QueryRow(
 		context.Background(),
-		`SELECT id, user_id, activity_id, manual_activity_id, is_creator, is_active 
+		`SELECT id, user_id, scheduled_activity_id 
 		FROM activity_participants WHERE id = $1`, id).Scan(
-		&participant.ID, &participant.UserID, &participant.ActivityID, &participant.ManualActivityID,
-		&participant.IsCreator, &participant.IsActive)
+		&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -103,10 +98,9 @@ func (s *Service) Update(id string, participant ActivityParticipant) (ActivityPa
 	cmdTag, err := s.db.Exec(
 		context.Background(),
 		`UPDATE activity_participants 
-		SET user_id = $1, activity_id = $2, manual_activity_id = $3, 
-		is_creator = $4, is_active = $5 
-		WHERE id = $6`,
-		participant.UserID, participant.ActivityID, participant.ManualActivityID, participant.IsCreator, participant.IsActive, id)
+		SET user_id = $1, scheduled_activity_id = $2
+		WHERE id = $3`,
+		participant.UserID, participant.ScheduledActivityID, id)
 
 	if err != nil {
 		return ActivityParticipant{}, false, err

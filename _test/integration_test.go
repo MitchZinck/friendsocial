@@ -14,9 +14,8 @@ import (
 	"friendsocial/activity_participants"
 	"friendsocial/friends"
 	"friendsocial/locations"
-	"friendsocial/manual_activities"
 	"friendsocial/postgres"
-	"friendsocial/user_activities"
+	"friendsocial/scheduled_activities"
 	"friendsocial/user_activity_preferences"
 	"friendsocial/user_availability"
 	"friendsocial/users"
@@ -32,10 +31,9 @@ type TestIDs struct {
 	FriendID                 int
 	LocationIDs              []int
 	ActivityID               int
-	UserActivityPreferenceID int
-	ManualActivityID         int
+	ScheduledActivityID      int
 	ActivityParticipantID    int
-	UserActivityID           int
+	UserActivityPreferenceID int
 }
 
 func TestIntegration(t *testing.T) {
@@ -76,28 +74,129 @@ func TestIntegration(t *testing.T) {
 	activity := testActivityEndpoints(t, ids.LocationIDs[2])
 	ids.ActivityID = activity.ID
 
-	// Test user activity preference endpoints
-	ids.UserActivityPreferenceID = testUserActivityPreferenceEndpoints(t, user1.ID, activity.ID)
+	// Test scheduled activity endpoints
+	scheduledActivity := testScheduledActivityEndpoints(t, user1.ID, activity.ID)
+	ids.ScheduledActivityID = scheduledActivity.ID
 
-	// Test manual activity endpoints
-	ids.ManualActivityID = testManualActivityEndpoints(t, user1.ID)
+	// Test user activity preference endpoints
+	ids.UserActivityPreferenceID = testUserActivityPreferenceEndpoints(t, user1.ID, scheduledActivity.ID)
 
 	// Test activity participant endpoints
-	ids.ActivityParticipantID = testActivityParticipantEndpoints(t, user1.ID, activity.ID)
+	ids.ActivityParticipantID = testActivityParticipantEndpoints(t, user1.ID, scheduledActivity.ID)
+}
 
-	// Test user activity endpoints
-	ids.UserActivityID = testUserActivityEndpoints(t, user1.ID, activity.ID)
+func TestThreeUsersActivitiesAndFriends(t *testing.T) {
+	// Defer the database wipe to ensure it runs at the end, even if tests fail
+	shouldWipeDatabase := false
+	defer func() {
+		if shouldWipeDatabase {
+			postgres.InitDB()
+			defer postgres.CloseDB()
+
+			err := wipeDatabase(postgres.DB)
+			if err != nil {
+				t.Errorf("Failed to wipe database: %v", err)
+			}
+		}
+	}()
+
+	// Create test locations
+	locationIDs := createTestLocations(t)
+
+	// Create three users
+	users := []users.User{
+		{
+			Name:       "Mitchell Zinck",
+			Email:      "mitchell.zinck@example.com",
+			Password:   "password123",
+			LocationID: &locationIDs[0],
+		},
+		{
+			Name:       "Lesya Afanasieva",
+			Email:      "lesya.afanasieva@example.com",
+			Password:   "password456",
+			LocationID: &locationIDs[1],
+		},
+		{
+			Name:       "Steve Jobs",
+			Email:      "steve.jobs@example.com",
+			Password:   "password789",
+			LocationID: &locationIDs[2],
+		},
+	}
+
+	for i := range users {
+		users[i] = testCreateUser(t, users[i])
+	}
+
+	// Create three activities
+	activities := []activities.Activity{
+		{
+			Name:          "Gym",
+			Description:   "Workout session at the local gym",
+			EstimatedTime: "90",
+			LocationID:    locationIDs[0],
+			UserCreated:   false,
+		},
+		{
+			Name:          "Durty Nelly's Pub",
+			Description:   "Drinks and socializing at Durty Nelly's",
+			EstimatedTime: "180",
+			LocationID:    locationIDs[1],
+			UserCreated:   false,
+		},
+		{
+			Name:          "Cineplex - Shrek 3",
+			Description:   "Watch Shrek 3 at Cineplex",
+			EstimatedTime: "105",
+			LocationID:    locationIDs[2],
+			UserCreated:   false,
+		},
+	}
+
+	for i := range activities {
+		activities[i] = testCreateActivity(t, activities[i])
+	}
+
+	// Add all users as friends
+	for i := 0; i < len(users); i++ {
+		for j := i + 1; j < len(users); j++ {
+			friend := friends.Friend{
+				UserID:   users[i].ID,
+				FriendID: users[j].ID,
+			}
+			testCreateFriend(t, friend)
+		}
+	}
+
+	// Schedule all three activities and add all friends as participants
+	for i, activity := range activities {
+		// Create a scheduled activity for each activity
+		scheduledActivity := scheduled_activities.ScheduledActivity{
+			ActivityID:  activity.ID,
+			ScheduledAt: time.Now().Add(time.Duration(i+1) * 24 * time.Hour), // Schedule each activity a day after the previous one
+		}
+		createdScheduledActivity := testCreateScheduledActivity(t, scheduledActivity)
+
+		// Add all users as participants
+		for _, user := range users {
+			participant := activity_participants.ActivityParticipant{
+				UserID:              user.ID,
+				ScheduledActivityID: createdScheduledActivity.ID,
+			}
+			testCreateActivityParticipant(t, participant)
+		}
+	}
 }
 
 // wipeDatabase deletes all data from the tables
 func wipeDatabase(db *pgxpool.Pool) error {
 	tables := []string{
 		"activity_participants",
-		"manual_activities",
 		"user_activity_preferences",
 		"user_availability",
 		"friends",
-		"user_activities",
+		"scheduled_activities",
 		"activities",
 		"users",
 		"locations",
@@ -117,10 +216,9 @@ func wipeDatabase(db *pgxpool.Pool) error {
 func deleteAllEntities(t *testing.T, ids TestIDs) {
 	t.Run("Delete Tests", func(t *testing.T) {
 		// Delete in reverse order of creation
-		testDeleteUserActivity(t, fmt.Sprintf("%d", ids.UserActivityID))
 		testDeleteActivityParticipant(t, fmt.Sprintf("%d", ids.ActivityParticipantID))
-		testDeleteManualActivity(t, fmt.Sprintf("%d", ids.ManualActivityID))
 		testDeleteUserActivityPreference(t, fmt.Sprintf("%d", ids.UserActivityPreferenceID))
+		testDeleteScheduledActivity(t, fmt.Sprintf("%d", ids.ScheduledActivityID))
 		testDeleteActivity(t, fmt.Sprintf("%d", ids.ActivityID))
 		testDeleteFriend(t, fmt.Sprintf("%d", ids.UserID), fmt.Sprintf("%d", ids.FriendID))
 		testDeleteUserAvailability(t, fmt.Sprintf("%d", ids.UserAvailabilityID))
@@ -277,6 +375,7 @@ func testActivityEndpoints(t *testing.T, locationID int) activities.Activity {
 			Description:   "This is a test activity",
 			EstimatedTime: "120",
 			LocationID:    locationID,
+			UserCreated:   false,
 		}
 
 		// Create
@@ -292,6 +391,7 @@ func testActivityEndpoints(t *testing.T, locationID int) activities.Activity {
 			Description:   "This is an updated test activity",
 			EstimatedTime: "3 hours",
 			LocationID:    locationID,
+			UserCreated:   true,
 		}
 		updatedActivity = testUpdateActivity(t, fmt.Sprintf("%d", createdActivity.ID), updatedActivity)
 	})
@@ -329,70 +429,31 @@ func testUserActivityPreferenceEndpoints(t *testing.T, userID, activityID int) i
 	return createdPreferenceID
 }
 
-func testUserActivityEndpoints(t *testing.T, userID, activityID int) int {
-	var createdUserActivityID int
-	t.Run("User Activity Endpoints", func(t *testing.T) {
-		userActivity := user_activities.UserActivity{
-			UserID:      userID,
+func testScheduledActivityEndpoints(t *testing.T, userID int, activityID int) scheduled_activities.ScheduledActivity {
+	var createdScheduledActivity scheduled_activities.ScheduledActivity
+	t.Run("Scheduled Activity Endpoints", func(t *testing.T) {
+		scheduledActivity := scheduled_activities.ScheduledActivity{
 			ActivityID:  activityID,
 			IsActive:    true,
-			ScheduledAt: time.Now().Add(24 * time.Hour), // Set scheduled_at to 24 hours in the future
+			ScheduledAt: time.Now().Add(24 * time.Hour),
 		}
 
 		// Create
-		createdUserActivity := testCreateUserActivity(t, userActivity)
-		createdUserActivityID = createdUserActivity.ID
+		createdScheduledActivity = testCreateScheduledActivity(t, scheduledActivity)
 
 		// Read
-		testGetUserActivity(t, fmt.Sprintf("%d", createdUserActivity.ID))
+		testGetScheduledActivity(t, fmt.Sprintf("%d", createdScheduledActivity.ID))
 
 		// Update
-		updatedUserActivity := user_activities.UserActivity{
-			ID:          createdUserActivity.ID,
-			UserID:      userID,
+		updatedScheduledActivity := scheduled_activities.ScheduledActivity{
+			ID:          createdScheduledActivity.ID,
 			ActivityID:  activityID,
 			IsActive:    false,
-			ScheduledAt: time.Now().Add(48 * time.Hour), // Update scheduled_at to 48 hours in the future
+			ScheduledAt: time.Now().Add(48 * time.Hour),
 		}
-		testUpdateUserActivity(t, fmt.Sprintf("%d", createdUserActivity.ID), updatedUserActivity)
+		testUpdateScheduledActivity(t, fmt.Sprintf("%d", createdScheduledActivity.ID), updatedScheduledActivity)
 	})
-	return createdUserActivityID
-}
-
-func testManualActivityEndpoints(t *testing.T, userID int) int {
-	var createdManualActivityID int
-	t.Run("Manual Activity Endpoints", func(t *testing.T) {
-		description := "This is a test manual activity"
-		estimatedTime := "1 hour"
-		manualActivity := manual_activities.ManualActivity{
-			UserID:        userID,
-			Name:          "Test Manual Activity",
-			Description:   &description,
-			EstimatedTime: &estimatedTime,
-			ScheduledAt:   time.Now().Add(24 * time.Hour),
-			IsActive:      true,
-		}
-
-		// Create
-		createdManualActivity := testCreateManualActivity(t, manualActivity)
-		createdManualActivityID = createdManualActivity.ID
-
-		// Read
-		testGetManualActivity(t, fmt.Sprintf("%d", createdManualActivity.ID))
-
-		// Update
-		updatedManualActivity := manual_activities.ManualActivity{
-			ID:            createdManualActivity.ID,
-			UserID:        userID,
-			Name:          "Updated Test Manual Activity",
-			Description:   &description,
-			EstimatedTime: &estimatedTime,
-			ScheduledAt:   time.Now().Add(48 * time.Hour),
-			IsActive:      false,
-		}
-		testUpdateManualActivity(t, fmt.Sprintf("%d", createdManualActivity.ID), updatedManualActivity)
-	})
-	return createdManualActivityID
+	return createdScheduledActivity
 }
 
 func testFriendEndpoints(t *testing.T, userID1, userID2 int) int {
@@ -413,14 +474,12 @@ func testFriendEndpoints(t *testing.T, userID1, userID2 int) int {
 	return createdFriendID
 }
 
-func testActivityParticipantEndpoints(t *testing.T, userID, activityID int) int {
+func testActivityParticipantEndpoints(t *testing.T, userID int, scheduledActivityID int) int {
 	var createdParticipantID int
 	t.Run("Activity Participant Endpoints", func(t *testing.T) {
 		participant := activity_participants.ActivityParticipant{
-			UserID:     userID,
-			ActivityID: &activityID,
-			IsCreator:  true,
-			IsActive:   true,
+			UserID:              userID,
+			ScheduledActivityID: scheduledActivityID,
 		}
 
 		// Create
@@ -432,11 +491,9 @@ func testActivityParticipantEndpoints(t *testing.T, userID, activityID int) int 
 
 		// Update
 		updatedParticipant := activity_participants.ActivityParticipant{
-			ID:         createdParticipant.ID,
-			UserID:     userID,
-			ActivityID: &activityID,
-			IsCreator:  false,
-			IsActive:   false,
+			ID:                  createdParticipant.ID,
+			UserID:              userID,
+			ScheduledActivityID: scheduledActivityID,
 		}
 		testUpdateActivityParticipant(t, fmt.Sprintf("%d", createdParticipant.ID), updatedParticipant)
 	})
@@ -618,81 +675,37 @@ func testDeleteUserActivityPreference(t *testing.T, preferenceID string) {
 	}
 }
 
-func testCreateUserActivity(t *testing.T, userActivity user_activities.UserActivity) user_activities.UserActivity {
-	resp, body := makeRequest(t, "POST", "/user_activity", userActivity)
+func testCreateScheduledActivity(t *testing.T, scheduledActivity scheduled_activities.ScheduledActivity) scheduled_activities.ScheduledActivity {
+	resp, body := makeRequest(t, "POST", "/scheduled_activity", scheduledActivity)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected status Created, got %v", resp.Status)
 	}
 
-	var createdUserActivity user_activities.UserActivity
-	err := json.Unmarshal(body, &createdUserActivity)
+	var createdScheduledActivity scheduled_activities.ScheduledActivity
+	err := json.Unmarshal(body, &createdScheduledActivity)
 	if err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
-	if createdUserActivity.ID == 0 {
-		t.Fatalf("Created user activity ID is 0")
-	}
-
-	return createdUserActivity
+	return createdScheduledActivity
 }
 
-func testGetUserActivity(t *testing.T, userActivityID string) {
-	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/user_activity/%s", userActivityID), nil)
+func testGetScheduledActivity(t *testing.T, id string) {
+	resp, _ := makeRequest(t, "GET", fmt.Sprintf("/scheduled_activity/%s", id), nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
-func testUpdateUserActivity(t *testing.T, userActivityID string, updates user_activities.UserActivity) {
-	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/user_activity/%s", userActivityID), updates)
+func testUpdateScheduledActivity(t *testing.T, id string, updates scheduled_activities.ScheduledActivity) {
+	resp, _ := makeRequest(t, "PUT", fmt.Sprintf("/scheduled_activity/%s", id), updates)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
+		t.Fatalf("Expected status OK, got %v", resp.Status)
 	}
 }
 
-func testDeleteUserActivity(t *testing.T, userActivityID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/user_activity/%s", userActivityID), nil)
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("Expected status No Content, got %v", resp.Status)
-	}
-}
-
-func testCreateManualActivity(t *testing.T, manualActivity manual_activities.ManualActivity) manual_activities.ManualActivity {
-	resp, body := makeRequest(t, "POST", "/manual_activity", manualActivity)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("Expected status Created, got %v. Response body: %s", resp.Status, string(body))
-	}
-
-	var createdManualActivity manual_activities.ManualActivity
-	err := json.Unmarshal(body, &createdManualActivity)
-	if err != nil {
-		t.Fatalf("Failed to parse response: %v", err)
-	}
-
-	if createdManualActivity.ID == 0 {
-		t.Fatalf("Created manual activity ID is 0")
-	}
-
-	return createdManualActivity
-}
-
-func testGetManualActivity(t *testing.T, manualActivityID string) {
-	resp, body := makeRequest(t, "GET", fmt.Sprintf("/manual_activity/%s", manualActivityID), nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
-	}
-}
-
-func testUpdateManualActivity(t *testing.T, manualActivityID string, updates manual_activities.ManualActivity) {
-	resp, body := makeRequest(t, "PUT", fmt.Sprintf("/manual_activity/%s", manualActivityID), updates)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status OK, got %v. Response body: %s", resp.Status, string(body))
-	}
-}
-
-func testDeleteManualActivity(t *testing.T, manualActivityID string) {
-	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/manual_activity/%s", manualActivityID), nil)
+func testDeleteScheduledActivity(t *testing.T, id string) {
+	resp, _ := makeRequest(t, "DELETE", fmt.Sprintf("/scheduled_activity/%s", id), nil)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("Expected status No Content, got %v", resp.Status)
 	}

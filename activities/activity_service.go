@@ -14,6 +14,7 @@ type Activity struct {
 	Description   string `json:"description"`
 	EstimatedTime string `json:"estimated_time"` // Interval type stored as string for simplicity
 	LocationID    int    `json:"location_id"`
+	UserCreated   bool   `json:"user_created"` // Add this field
 }
 
 type Service struct {
@@ -31,17 +32,16 @@ func (activityService *Service) Create(activity Activity) (Activity, error) {
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	var activityID int
 	err := activityService.db.QueryRow(
 		context.Background(),
-		"INSERT INTO activities (name, description, estimated_time, location_id) VALUES ($1, $2, $3, $4) RETURNING id",
-		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID,
-	).Scan(&activityID)
+		"INSERT INTO activities (name, description, estimated_time, location_id, user_created) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated,
+	).Scan(&activity.ID)
+
 	if err != nil {
 		return Activity{}, err
 	}
 
-	activity.ID = activityID
 	return activity, nil
 }
 
@@ -90,8 +90,10 @@ func (activityService *Service) Update(id string, activity Activity) (Activity, 
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	cmdTag, err := activityService.db.Exec(context.Background(), "UPDATE activities SET name = $1, description = $2, estimated_time = $3, location_id = $4 WHERE id = $5",
-		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID, id)
+	cmdTag, err := activityService.db.Exec(context.Background(),
+		"UPDATE activities SET name = $1, description = $2, estimated_time = $3, location_id = $4, user_created = $5 WHERE id = $6",
+		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated, id)
+
 	if err != nil {
 		return Activity{}, false, err
 	}

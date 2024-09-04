@@ -29,24 +29,21 @@ CREATE TABLE activities (
     description TEXT NOT NULL,
     estimated_time INTERVAL NOT NULL,
     location_id INTEGER NOT NULL,
+    user_created BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_location_id FOREIGN KEY (location_id)
     REFERENCES locations (id)
 );
 
-CREATE TABLE user_activities (
+CREATE TABLE scheduled_activities (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
     activity_id INTEGER NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     scheduled_at TIMESTAMPTZ NOT NULL,
-    CONSTRAINT fk_user_id FOREIGN KEY (user_id)
-    REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_activity_id FOREIGN KEY (activity_id)
     REFERENCES activities (id)
 );
 
-CREATE INDEX idx_user_activities_user_id ON user_activities (user_id); -- Index on user_id
-CREATE INDEX idx_user_activities_activity_id ON user_activities (activity_id); -- Index on activity_id
+CREATE INDEX idx_scheduled_activities_activity_id ON scheduled_activities (activity_id); -- Index on activity_id
 
 CREATE TABLE friends (
     user_id INTEGER NOT NULL,
@@ -93,44 +90,16 @@ CREATE TABLE user_activity_preferences (
 CREATE INDEX idx_user_activity_preferences_user_id ON user_activity_preferences (user_id); -- Index on user_id
 CREATE INDEX idx_user_activity_preferences_activity_id ON user_activity_preferences (activity_id); -- Index on activity_id
 
-CREATE TABLE manual_activities (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    activity_id INTEGER NULL, -- nullable to allow for truly custom activities
-    name VARCHAR(100) NOT NULL,
-    description TEXT NULL, -- nullable if description is optional
-    estimated_time INTERVAL NULL, -- nullable to allow flexible time entries
-    location_id INTEGER NULL,
-    scheduled_at TIMESTAMPTZ NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_location_id FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE SET NULL,
-    CONSTRAINT fk_activity_id FOREIGN KEY (activity_id) REFERENCES activities (id)
-);
-
-CREATE INDEX idx_manual_activities_user_id ON manual_activities (user_id); -- Index on user_id
-
--- New table for participants, which can reference either manual or automated activities
 CREATE TABLE activity_participants (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    activity_id INTEGER NULL,
-    manual_activity_id INTEGER NULL,
-    is_creator BOOLEAN DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
+    scheduled_activity_id INTEGER NOT NULL,
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_activity_id FOREIGN KEY (activity_id)
-    REFERENCES activities (id) ON DELETE CASCADE,
-    CONSTRAINT fk_manual_activity_id FOREIGN KEY (manual_activity_id)
-    REFERENCES manual_activities (id) ON DELETE CASCADE,
-    CONSTRAINT chk_activity_participant CHECK (
-        (activity_id IS NOT NULL AND manual_activity_id IS NULL)
-        OR (manual_activity_id IS NOT NULL AND activity_id IS NULL)
-    ), -- Ensure that only one of activity_id or manual_activity_id is filled
-    CONSTRAINT uq_activity_user UNIQUE (user_id, activity_id, manual_activity_id)
+    CONSTRAINT fk_scheduled_activity_id FOREIGN KEY (scheduled_activity_id)
+    REFERENCES scheduled_activities (id) ON DELETE CASCADE,
+    CONSTRAINT uq_activity_user UNIQUE (user_id, scheduled_activity_id)
 );
 
-CREATE INDEX idx_activity_participants_user_id ON activity_participants (user_id); -- Index on user_id
-CREATE INDEX idx_activity_participants_activity_id ON activity_participants (activity_id); -- Index on activity_id
-CREATE INDEX idx_activity_participants_manual_activity_id ON activity_participants (manual_activity_id); -- Index on manual_activity_id
+CREATE INDEX idx_activity_participants_user_id ON activity_participants (user_id);
+CREATE INDEX idx_activity_participants_scheduled_activity_id ON activity_participants (scheduled_activity_id);
