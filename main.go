@@ -78,6 +78,8 @@ func main() {
 	mux.HandleFunc("GET /activity_participant/{id}", activityParticipantManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /activity_participant/{id}", activityParticipantManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /activity_participant/{id}", activityParticipantManager.HandleHTTPDelete)
+	mux.HandleFunc("GET /activity_participants/user/{user_id}", activityParticipantManager.HandleHTTPGetActivitiesByUserID)
+	mux.HandleFunc("GET /activity_participants/scheduled_activity/{scheduled_activity_id}", activityParticipantManager.HandleHTTPGetParticipantsByActivityID)
 
 	locationService := locations.NewService(postgres.DB)
 	locationManager := locations.NewLocationHTTPHandler(locationService)

@@ -3,6 +3,7 @@ package activity_participants
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 // ActivityParticipantService defines the methods for handling activity participants
@@ -12,6 +13,8 @@ type ActivityParticipantService interface {
 	Read(id string) (ActivityParticipant, bool, error)
 	Update(id string, participant ActivityParticipant) (ActivityParticipant, bool, error)
 	Delete(id string) (bool, error)
+	GetActivitiesByUserID(userID string) ([]ActivityParticipant, error)
+	GetParticipantsByScheduledActivityID(scheduledActivityID int) ([]ActivityParticipant, error)
 }
 
 // ActivityParticipantError represents the structure of an error response
@@ -34,6 +37,7 @@ func NewActivityParticipantHTTPHandler(activityParticipantService ActivityPartic
 }
 
 // HandleHTTPPost creates a new activity participant
+//
 //	@Summary		Create a new activity participant
 //	@Description	Create a new activity participant
 //	@Tags			participants
@@ -68,6 +72,7 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPPost(w http.ResponseWriter, 
 }
 
 // HandleHTTPGet retrieves all activity participants
+//
 //	@Summary		Get all activity participants
 //	@Description	Retrieve all activity participants
 //	@Tags			participants
@@ -92,6 +97,7 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r
 }
 
 // HandleHTTPGetWithID retrieves a specific activity participant by ID
+//
 //	@Summary		Get an activity participant by ID
 //	@Description	Retrieve an activity participant by ID
 //	@Tags			participants
@@ -125,6 +131,7 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetWithID(w http.ResponseWri
 }
 
 // HandleHTTPPut updates an existing activity participant
+//
 //	@Summary		Update an activity participant
 //	@Description	Update an existing activity participant
 //	@Tags			participants
@@ -167,6 +174,7 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r
 }
 
 // HandleHTTPDelete deletes an activity participant
+//
 //	@Summary		Delete an activity participant
 //	@Description	Delete an activity participant by ID
 //	@Tags			participants
@@ -190,6 +198,67 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPDelete(w http.ResponseWriter
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleHTTPGetActivitiesByUserID retrieves all activities a user is participating in
+//
+//	@Summary		Get activities by user ID
+//	@Description	Retrieve all activities a user is participating in
+//	@Tags			participants
+//	@Produce		json
+//	@Param			user_id	path		int	true	"User ID"
+//	@Success		200		{array}		ActivityParticipant
+//	@Failure		400		{object}	ActivityParticipantError
+//	@Failure		500		{object}	ActivityParticipantError
+//	@Router			/activity_participants/user/{user_id} [get]
+func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetActivitiesByUserID(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+
+	participants, err := aH.activityParticipantService.GetActivitiesByUserID(userID)
+	if err != nil {
+		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(participants)
+	if err != nil {
+		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+}
+
+// HandleHTTPGetParticipantsByActivityID retrieves all users participating in a scheduled activity
+//
+//	@Summary		Get participants by activity ID
+//	@Description	Retrieve all users participating in a scheduled activity
+//	@Tags			participants
+//	@Produce		json
+//	@Param			activity_id	path		int	true	"Scheduled Activity ID"
+//	@Success		200			{array}		ActivityParticipant
+//	@Failure		400			{object}	ActivityParticipantError
+//	@Failure		500			{object}	ActivityParticipantError
+//	@Router			/activity_participants/scheduled_activity/{scheduled_activity_id} [get]
+func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetParticipantsByActivityID(w http.ResponseWriter, r *http.Request) {
+	activityIDStr := r.PathValue("scheduled_activity_id")
+	activityID, err := strconv.Atoi(activityIDStr)
+	if err != nil {
+		aH.errorResponse(w, http.StatusBadRequest, "Invalid activity ID")
+		return
+	}
+
+	participants, err := aH.activityParticipantService.GetParticipantsByScheduledActivityID(activityID)
+	if err != nil {
+		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(participants)
+	if err != nil {
+		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 }
 
 func (aH *ActivityParticipantHTTPHandler) errorResponse(w http.ResponseWriter, statusCode int, errorString string) {

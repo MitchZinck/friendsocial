@@ -45,7 +45,7 @@ func NewScheduledActivityHTTPHandler(scheduledActivityService ScheduledActivityS
 //	@Success		201				{object}	ScheduledActivity
 //	@Failure		400				{object}	ScheduledActivityError
 //	@Failure		500				{object}	ScheduledActivityError
-//	@Router			/scheduled_activities [post]
+//	@Router			/scheduled_activity [post]
 func (uH *ScheduledActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Request) {
 	var scheduledActivity ScheduledActivity
 	err := json.NewDecoder(r.Body).Decode(&scheduledActivity)
@@ -78,7 +78,7 @@ func (uH *ScheduledActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r 
 //	@Success		200	{array}		ScheduledActivity
 //	@Failure		400	{object}	ScheduledActivityError
 //	@Failure		500	{object}	ScheduledActivityError
-//	@Router			/scheduled_activities [get]
+//	@Router			/scheduled_activity [get]
 func (uH *ScheduledActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
 	scheduledActivities, err := uH.scheduledActivityService.ReadAll()
 	if err != nil {

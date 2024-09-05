@@ -128,3 +128,55 @@ func (s *Service) Delete(id string) (bool, error) {
 
 	return true, nil
 }
+
+func (s *Service) GetActivitiesByUserID(userID string) ([]ActivityParticipant, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	rows, err := s.db.Query(context.Background(),
+		`SELECT id, user_id, scheduled_activity_id 
+         FROM activity_participants 
+         WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var participants []ActivityParticipant
+	for rows.Next() {
+		var participant ActivityParticipant
+		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+		if err != nil {
+			return nil, err
+		}
+		participants = append(participants, participant)
+	}
+
+	return participants, nil
+}
+
+func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID int) ([]ActivityParticipant, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	rows, err := s.db.Query(context.Background(),
+		`SELECT id, user_id, scheduled_activity_id 
+         FROM activity_participants 
+         WHERE scheduled_activity_id = $1`, scheduledActivityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var participants []ActivityParticipant
+	for rows.Next() {
+		var participant ActivityParticipant
+		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+		if err != nil {
+			return nil, err
+		}
+		participants = append(participants, participant)
+	}
+
+	return participants, nil
+}
