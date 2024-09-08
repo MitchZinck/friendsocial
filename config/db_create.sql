@@ -16,6 +16,7 @@ CREATE TABLE users (
     email VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     location_id INTEGER,
+    profile_picture VARCHAR(255),
     CONSTRAINT uq_email UNIQUE (email),
     CONSTRAINT fk_location FOREIGN KEY (location_id) REFERENCES locations (id)
 );
@@ -26,6 +27,7 @@ CREATE INDEX idx_users_location ON users (location_id);
 CREATE TABLE activities (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    emoji VARCHAR(10),
     description TEXT NOT NULL,
     estimated_time INTERVAL NOT NULL,
     location_id INTEGER NOT NULL,

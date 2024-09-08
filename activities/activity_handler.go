@@ -33,6 +33,7 @@ func NewActivityHTTPHandler(activityService ActivityService) *ActivityHTTPHandle
 }
 
 // HandleHTTPPost handles the creation of a new activity
+//
 //	@Summary		Create a new activity
 //	@Description	Create a new activity
 //	@Tags			activities
@@ -67,6 +68,7 @@ func (aH *ActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Req
 }
 
 // HandleHTTPGet handles fetching all activities
+//
 //	@Summary		Get all activities
 //	@Description	Get all activities
 //	@Tags			activities
@@ -91,6 +93,7 @@ func (aH *ActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Requ
 }
 
 // HandleHTTPGetWithID handles fetching an activity by ID
+//
 //	@Summary		Get an activity by ID
 //	@Description	Get an activity by ID
 //	@Tags			activities
@@ -124,6 +127,7 @@ func (aH *ActivityHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *htt
 }
 
 // HandleHTTPPut handles updating an activity
+//
 //	@Summary		Update an activity by ID
 //	@Description	Update an activity by ID
 //	@Tags			activities
@@ -166,6 +170,7 @@ func (aH *ActivityHTTPHandler) HandleHTTPPut(w http.ResponseWriter, r *http.Requ
 }
 
 // HandleHTTPDelete handles deleting an activity by ID
+//
 //	@Summary		Delete an activity by ID
 //	@Description	Delete an activity by ID
 //	@Tags			activities

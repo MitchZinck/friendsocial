@@ -11,6 +11,7 @@ import (
 type Activity struct {
 	ID            int    `json:"id"`
 	Name          string `json:"name"`
+	Emoji         string `json:"emoji"` // Add this field
 	Description   string `json:"description"`
 	EstimatedTime string `json:"estimated_time"` // Interval type stored as string for simplicity
 	LocationID    int    `json:"location_id"`
@@ -34,8 +35,8 @@ func (activityService *Service) Create(activity Activity) (Activity, error) {
 
 	err := activityService.db.QueryRow(
 		context.Background(),
-		"INSERT INTO activities (name, description, estimated_time, location_id, user_created) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated,
+		"INSERT INTO activities (name, emoji, description, estimated_time, location_id, user_created) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+		activity.Name, activity.Emoji, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated,
 	).Scan(&activity.ID)
 
 	if err != nil {
@@ -49,7 +50,7 @@ func (activityService *Service) ReadAll() ([]Activity, error) {
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	rows, err := activityService.db.Query(context.Background(), "SELECT id, name, description, estimated_time::text, location_id FROM activities")
+	rows, err := activityService.db.Query(context.Background(), "SELECT id, name, emoji, description, estimated_time::text, location_id, user_created FROM activities")
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,7 @@ func (activityService *Service) ReadAll() ([]Activity, error) {
 	var activities []Activity
 	for rows.Next() {
 		var activity Activity
-		if err := rows.Scan(&activity.ID, &activity.Name, &activity.Description, &activity.EstimatedTime, &activity.LocationID); err != nil {
+		if err := rows.Scan(&activity.ID, &activity.Name, &activity.Emoji, &activity.Description, &activity.EstimatedTime, &activity.LocationID, &activity.UserCreated); err != nil {
 			return nil, err
 		}
 		activities = append(activities, activity)
@@ -73,9 +74,9 @@ func (activityService *Service) Read(id string) (Activity, bool, error) {
 
 	var activity Activity
 	err := activityService.db.QueryRow(context.Background(),
-		`SELECT id, name, description, estimated_time::text, location_id 
+		`SELECT id, name, emoji, description, estimated_time::text, location_id, user_created 
 		FROM activities 
-		WHERE id = $1`, id).Scan(&activity.ID, &activity.Name, &activity.Description, &activity.EstimatedTime, &activity.LocationID)
+		WHERE id = $1`, id).Scan(&activity.ID, &activity.Name, &activity.Emoji, &activity.Description, &activity.EstimatedTime, &activity.LocationID, &activity.UserCreated)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return Activity{}, false, nil
@@ -91,8 +92,8 @@ func (activityService *Service) Update(id string, activity Activity) (Activity, 
 	defer activityService.Unlock()
 
 	cmdTag, err := activityService.db.Exec(context.Background(),
-		"UPDATE activities SET name = $1, description = $2, estimated_time = $3, location_id = $4, user_created = $5 WHERE id = $6",
-		activity.Name, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated, id)
+		"UPDATE activities SET name = $1, emoji = $2, description = $3, estimated_time = $4, location_id = $5, user_created = $6 WHERE id = $7",
+		activity.Name, activity.Emoji, activity.Description, activity.EstimatedTime, activity.LocationID, activity.UserCreated, id)
 
 	if err != nil {
 		return Activity{}, false, err
