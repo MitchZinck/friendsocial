@@ -40,6 +40,7 @@ func main() {
 
 	mux.HandleFunc("POST /user_availability", availabilityManager.HandleHTTPPost)
 	mux.HandleFunc("GET /user_availability", availabilityManager.HandleHTTPGet)
+	mux.HandleFunc("GET /user_availability/user/{user_id}", availabilityManager.HandleHTTPGetByUserID)
 	mux.HandleFunc("GET /user_availability/{id}", availabilityManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /user_availability/{id}", availabilityManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /user_availability/{id}", availabilityManager.HandleHTTPDelete)

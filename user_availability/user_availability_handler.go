@@ -7,7 +7,8 @@ import (
 
 type UserAvailabilityService interface {
 	Create(availability UserAvailability) (UserAvailability, error)
-	ReadAll(userID string) ([]UserAvailability, error)
+	ReadAll() ([]UserAvailability, error)
+	ReadByUserID(userID string) ([]UserAvailability, error)
 	Read(id string) (UserAvailability, bool, error)
 	Update(id string, availability UserAvailability) (UserAvailability, bool, error)
 	Delete(id string) (bool, error)
@@ -78,8 +79,7 @@ func (uH *UserAvailabilityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *
 //	@Failure		500	{object}	UserAvailabilityError
 //	@Router			/user_availability [get]
 func (uH *UserAvailabilityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
-	userID := r.PathValue("user_id")
-	availability, err := uH.availabilityService.ReadAll(userID)
+	availability, err := uH.availabilityService.ReadAll()
 	if err != nil {
 		uH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
@@ -196,6 +196,34 @@ func (uH *UserAvailabilityHTTPHandler) HandleHTTPDelete(w http.ResponseWriter, r
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleHTTPGetByUserID handles retrieving a user availability record by user ID
+//
+//	@Summary		Get user availability by user ID
+//	@Description	Retrieve availability records for a specific user by their ID
+//	@Tags			User Availability
+//	@Produce		json
+//	@Param			user_id	path	string	true	"User ID"
+//	@Success		200	{array}		UserAvailability
+//	@Failure		400	{object}	UserAvailabilityError
+//	@Failure		404	{object}	UserAvailabilityError
+//	@Failure		500	{object}	UserAvailabilityError
+//	@Router			/user_availability/user/{user_id} [get]
+func (uH *UserAvailabilityHTTPHandler) HandleHTTPGetByUserID(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+	availability, err := uH.availabilityService.ReadByUserID(userID)
+	if err != nil {
+		uH.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(availability)
+	if err != nil {
+		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 }
 
 // errorResponse sends a JSON error response

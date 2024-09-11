@@ -10,12 +10,13 @@ import (
 )
 
 type UserAvailability struct {
-	ID          int       `json:"id"`
-	UserID      int       `json:"user_id"`
-	DayOfWeek   string    `json:"day_of_week"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	IsAvailable bool      `json:"is_available"`
+	ID           int        `json:"id"`
+	UserID       int        `json:"user_id"`
+	DayOfWeek    string     `json:"day_of_week"`
+	StartTime    string     `json:"start_time"` // Change to string
+	EndTime      string     `json:"end_time"`   // Change to string
+	IsAvailable  bool       `json:"is_available"`
+	SpecificDate *time.Time `json:"specific_date"`
 }
 
 type Service struct {
@@ -35,10 +36,10 @@ func (s *Service) Create(availability UserAvailability) (UserAvailability, error
 
 	err := s.db.QueryRow(
 		context.Background(),
-		`INSERT INTO user_availability (user_id, day_of_week, start_time, end_time, is_available) 
-		 VALUES ($1, $2, $3, $4, $5) 
+		`INSERT INTO user_availability (user_id, day_of_week, start_time, end_time, is_available, specific_date) 
+		 VALUES ($1, $2, $3::time with time zone, $4::time with time zone, $5, $6::date) 
 		 RETURNING id`,
-		availability.UserID, availability.DayOfWeek, availability.StartTime, availability.EndTime, availability.IsAvailable,
+		availability.UserID, availability.DayOfWeek, availability.StartTime, availability.EndTime, availability.IsAvailable, availability.SpecificDate,
 	).Scan(&availability.ID)
 
 	if err != nil {
@@ -48,11 +49,11 @@ func (s *Service) Create(availability UserAvailability) (UserAvailability, error
 	return availability, nil
 }
 
-func (s *Service) ReadAll(userID string) ([]UserAvailability, error) {
+func (s *Service) ReadAll() ([]UserAvailability, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, day_of_week, start_time, end_time, is_available FROM user_availability WHERE user_id = $1", userID)
+	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, day_of_week, start_time::text, end_time::text, is_available, specific_date FROM user_availability")
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +77,9 @@ func (s *Service) Read(id string) (UserAvailability, bool, error) {
 
 	var availability UserAvailability
 	err := s.db.QueryRow(context.Background(),
-		"SELECT id, user_id, day_of_week, start_time, end_time, is_available FROM user_availability WHERE id = $1",
+		"SELECT id, user_id, day_of_week, start_time::text, end_time::text, is_available, specific_date FROM user_availability WHERE id = $1",
 		id,
-	).Scan(&availability.ID, &availability.UserID, &availability.DayOfWeek, &availability.StartTime, &availability.EndTime, &availability.IsAvailable)
+	).Scan(&availability.ID, &availability.UserID, &availability.DayOfWeek, &availability.StartTime, &availability.EndTime, &availability.IsAvailable, &availability.SpecificDate)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -97,9 +98,9 @@ func (s *Service) Update(id string, availability UserAvailability) (UserAvailabi
 	cmdTag, err := s.db.Exec(
 		context.Background(),
 		`UPDATE user_availability 
-		 SET user_id = $1, day_of_week = $2, start_time = $3, end_time = $4, is_available = $5 
-		 WHERE id = $6`,
-		availability.UserID, availability.DayOfWeek, availability.StartTime, availability.EndTime, availability.IsAvailable, id,
+		 SET user_id = $1, day_of_week = $2, start_time = $3::time with time zone, end_time = $4::time with time zone, is_available = $5, specific_date = $6::date
+		 WHERE id = $7`,
+		availability.UserID, availability.DayOfWeek, availability.StartTime, availability.EndTime, availability.IsAvailable, availability.SpecificDate, id,
 	)
 
 	if err != nil {
@@ -111,6 +112,28 @@ func (s *Service) Update(id string, availability UserAvailability) (UserAvailabi
 	}
 
 	return availability, true, nil
+}
+
+func (s *Service) ReadByUserID(userID string) ([]UserAvailability, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, day_of_week, start_time::text, end_time::text, is_available, specific_date FROM user_availability WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var availabilities []UserAvailability
+	for rows.Next() {
+		var availability UserAvailability
+		if err := rows.Scan(&availability.ID, &availability.UserID, &availability.DayOfWeek, &availability.StartTime, &availability.EndTime, &availability.IsAvailable, &availability.SpecificDate); err != nil {
+			return nil, err
+		}
+		availabilities = append(availabilities, availability)
+	}
+
+	return availabilities, nil
 }
 
 func (s *Service) Delete(id string) (bool, error) {

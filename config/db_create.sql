@@ -68,9 +68,10 @@ CREATE TABLE user_availability (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     day_of_week VARCHAR(9) NOT NULL, -- e.g., 'Monday', 'Tuesday'
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT false,
+    start_time TIME WITH TIME ZONE NOT NULL,
+    end_time TIME WITH TIME ZONE NOT NULL,
+    is_available BOOLEAN DEFAULT true,
+    specific_date DATE, 
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE CASCADE
 );
