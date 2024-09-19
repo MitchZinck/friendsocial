@@ -73,13 +73,13 @@ func (friendService *Service) Delete(userID string, friendID string) (bool, erro
 }
 
 // Retrieves all friends of a given user
-func (friendService *Service) ReadAll(userID string) ([]Friend, error) {
+func (friendService *Service) ReadByUserID(userID string) ([]Friend, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 
 	rows, err := friendService.db.Query(
 		context.Background(),
-		"SELECT user_id, friend_id, created_at::text FROM friends WHERE user_id = $1",
+		"SELECT user_id, friend_id, created_at::text FROM friends WHERE user_id = $1 OR friend_id = $1",
 		userID,
 	)
 	if err != nil {
@@ -99,8 +99,34 @@ func (friendService *Service) ReadAll(userID string) ([]Friend, error) {
 	return friends, nil
 }
 
+func (friendService *Service) ReadByFriendID(friendID string) ([]Friend, error) {
+	friendService.Lock()
+	defer friendService.Unlock()
+
+	rows, err := friendService.db.Query(
+		context.Background(),
+		"SELECT user_id, friend_id, created_at::text FROM friends WHERE friend_id = $1",
+		friendID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var friends []Friend
+	for rows.Next() {
+		var friend Friend
+		if err := rows.Scan(&friend.UserID, &friend.FriendID, &friend.CreatedAt); err != nil {
+			return nil, err
+		}
+		friends = append(friends, friend)
+	}
+
+	return friends, nil
+}
+
 // Checks if two users are friends
-func (friendService *Service) Read(userID string, friendID string) (bool, error) {
+func (friendService *Service) UsersAreFriends(userID string, friendID string) (bool, error) {
 	friendService.Lock()
 	defer friendService.Unlock()
 

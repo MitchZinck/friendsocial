@@ -2,16 +2,21 @@ package scheduled_activities
 
 import (
 	"encoding/json"
+	"friendsocial/user_activity_preferences"
 	"net/http"
+	"strconv"
 )
 
 // ScheduledActivityService defines the interface for scheduled activity operations.
 type ScheduledActivityService interface {
 	Create(scheduledActivity ScheduledActivity) (ScheduledActivity, error)
+	CreateMultiple(activityID int, selectedDates []string, startTime string, endTime string, timeZone string) ([]ScheduledActivity, error)
 	ReadAll() ([]ScheduledActivity, error)
 	Read(id string) (ScheduledActivity, bool, error)
 	Update(id string, scheduledActivity ScheduledActivity) (ScheduledActivity, bool, error)
 	Delete(id string) (bool, error)
+	CreateRepeatingScheduledActivity(preference user_activity_preferences.UserActivityPreference, startTime string, timeZone string) ([]ScheduledActivity, error)
+	DeclineRepeatedActivity(userID int, scheduledActivityID int) error
 }
 
 // ScheduledActivityError represents an error response.
@@ -25,12 +30,14 @@ type ScheduledActivityError struct {
 // ScheduledActivityHTTPHandler is the HTTP handler for scheduled activity operations.
 type ScheduledActivityHTTPHandler struct {
 	scheduledActivityService ScheduledActivityService
+	services                 *map[string]interface{}
 }
 
 // NewScheduledActivityHTTPHandler creates a new ScheduledActivityHTTPHandler.
-func NewScheduledActivityHTTPHandler(scheduledActivityService ScheduledActivityService) *ScheduledActivityHTTPHandler {
+func NewScheduledActivityHTTPHandler(scheduledActivityService ScheduledActivityService, services *map[string]interface{}) *ScheduledActivityHTTPHandler {
 	return &ScheduledActivityHTTPHandler{
 		scheduledActivityService: scheduledActivityService,
+		services:                 services,
 	}
 }
 
@@ -63,6 +70,55 @@ func (uH *ScheduledActivityHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	err = json.NewEncoder(w).Encode(newScheduledActivity)
+	if err != nil {
+		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+}
+
+type CreateMultipleRequest struct {
+	ActivityID    int      `json:"activity_id"`
+	SelectedDates []string `json:"selected_dates"`
+	StartTime     string   `json:"start_time"`
+	EndTime       string   `json:"end_time"`
+	TimeZone      string   `json:"time_zone"`
+}
+
+// HandleHTTPPostMultiple handles the creation of multiple scheduled activities.
+//
+//	@Summary		Create multiple scheduled activities
+//	@Description	Create multiple scheduled activities
+//	@Tags			scheduled_activities
+//	@Accept			json
+//	@Produce		json
+//	@Param			scheduledActivities	body		[]ScheduledActivity	true	"Scheduled Activities"
+//	@Success		201				{object}	ScheduledActivity
+//	@Failure		400				{object}	ScheduledActivityError
+//	@Failure		500				{object}	ScheduledActivityError
+//	@Router			/scheduled_activities [post]
+func (uH *ScheduledActivityHTTPHandler) HandleHTTPPostMultiple(w http.ResponseWriter, r *http.Request) {
+	var createMultipleRequest CreateMultipleRequest
+	err := json.NewDecoder(r.Body).Decode(&createMultipleRequest)
+	if err != nil {
+		uH.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	newScheduledActivities, err := uH.scheduledActivityService.CreateMultiple(
+		createMultipleRequest.ActivityID,
+		createMultipleRequest.SelectedDates,
+		createMultipleRequest.StartTime,
+		createMultipleRequest.EndTime,
+		createMultipleRequest.TimeZone,
+	)
+	if err != nil {
+		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	err = json.NewEncoder(w).Encode(newScheduledActivities)
 	if err != nil {
 		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
@@ -209,4 +265,99 @@ func (uH *ScheduledActivityHTTPHandler) errorResponse(w http.ResponseWriter, sta
 	if encodingError != nil {
 		http.Error(w, encodingError.Error(), http.StatusInternalServerError)
 	}
+}
+
+type RepeatScheduledActivityRequest struct {
+	PreferenceID string `json:"preference_id"`
+	StartTime    string `json:"start_time"`
+	TimeZone     string `json:"time_zone"`
+}
+
+// HandleHTTPPostRepeatScheduledActivity handles the request to repeat a scheduled activity
+//
+//	@Summary		Repeat a scheduled activity
+//	@Description	Repeat a scheduled activity
+//	@Tags			scheduled_activities
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		RepeatScheduledActivityRequest	true	"Repeat Scheduled Activity Request"
+//	@Success		201		{array}		scheduled_activities.ScheduledActivity
+//	@Failure		400		{object}	ScheduledActivityError
+//	@Failure		500		{object}	ScheduledActivityError
+//	@Router			/scheduled_activity/repeat [post]
+func (h *ScheduledActivityHTTPHandler) HandleHTTPPostRepeatScheduledActivity(w http.ResponseWriter, r *http.Request) {
+	var request RepeatScheduledActivityRequest
+	err := json.NewDecoder(r.Body).Decode(&request)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	preference, _, err := (*h.services)["user_activity_preferences"].(user_activity_preferences.UserActivityPreferenceService).Read(request.PreferenceID)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	scheduledActivities, err := h.scheduledActivityService.CreateRepeatingScheduledActivity(preference, request.StartTime, request.TimeZone)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	err = json.NewEncoder(w).Encode(scheduledActivities)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+}
+
+type DeclineRepeatedActivityRequest struct {
+	UserID              string `json:"user_id"`
+	ScheduledActivityID string `json:"scheduled_activity_id"`
+}
+
+// HandleHTTPDeclineRepeatedActivity handles the request to decline a repeated activity
+//
+//	@Summary		Decline a repeated activity
+//	@Description	Decline a repeated activity
+//	@Tags			preferences
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		DeclineRepeatedActivityRequest	true	"Decline Repeated Activity Request"
+//	@Success		200		"No Content"
+//	@Failure		400		{object}	ScheduledActivityError
+//	@Failure		500		{object}	ScheduledActivityError
+//	@Router			/scheduled_activity/repeat/decline [post]
+func (h *ScheduledActivityHTTPHandler) HandleHTTPPostDeclineRepeatedActivity(w http.ResponseWriter, r *http.Request) {
+	var request DeclineRepeatedActivityRequest
+	err := json.NewDecoder(r.Body).Decode(&request)
+
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userID, err := strconv.Atoi(request.UserID)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	scheduledActivityID, err := strconv.Atoi(request.ScheduledActivityID)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = h.scheduledActivityService.DeclineRepeatedActivity(userID, scheduledActivityID)
+
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

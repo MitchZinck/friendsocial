@@ -15,8 +15,12 @@ import (
 	"friendsocial/users"
 	"log"
 
+	"friendsocial/user_activity_preferences_participants"
+
 	_ "github.com/lib/pq"
 )
+
+var services = make(map[string]interface{})
 
 func main() {
 	postgres.InitDB()
@@ -25,6 +29,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	userServices := users.NewService(postgres.DB)
+	services["users"] = userServices
 	userManager := users.NewUserHTTPHandler(userServices)
 
 	mux.HandleFunc("POST /users", userManager.HandleHTTPPost)
@@ -36,6 +41,7 @@ func main() {
 
 	// User availability services and handlers
 	availabilityService := user_availability.NewService(postgres.DB)
+	services["user_availability"] = availabilityService
 	availabilityManager := user_availability.NewUserAvailabilityHTTPHandler(availabilityService)
 
 	mux.HandleFunc("POST /user_availability", availabilityManager.HandleHTTPPost)
@@ -45,7 +51,8 @@ func main() {
 	mux.HandleFunc("PUT /user_availability/{id}", availabilityManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /user_availability/{id}", availabilityManager.HandleHTTPDelete)
 
-	userActivityPreferenceService := user_activity_preferences.NewService(postgres.DB)
+	userActivityPreferenceService := user_activity_preferences.NewService(postgres.DB, &services)
+	services["user_activity_preferences"] = userActivityPreferenceService
 	userActivityPreferenceManager := user_activity_preferences.NewUserActivityPreferenceHTTPHandler(userActivityPreferenceService)
 
 	mux.HandleFunc("POST /user_activity_preference", userActivityPreferenceManager.HandleHTTPPost)
@@ -53,25 +60,42 @@ func main() {
 	mux.HandleFunc("GET /user_activity_preference/{id}", userActivityPreferenceManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /user_activity_preference/{id}", userActivityPreferenceManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /user_activity_preference/{id}", userActivityPreferenceManager.HandleHTTPDelete)
+	mux.HandleFunc("GET /user_activity_preferences/user/{user_id}", userActivityPreferenceManager.HandleHTTPGetByUserID)
 
-	scheduledActivityService := scheduled_activities.NewService(postgres.DB)
-	scheduledActivityManager := scheduled_activities.NewScheduledActivityHTTPHandler(scheduledActivityService)
+	userActivityPreferenceParticipantService := user_activity_preferences_participants.NewService(postgres.DB)
+	userActivityPreferenceParticipantManager := user_activity_preferences_participants.NewUserActivityPreferenceParticipantHTTPHandler(userActivityPreferenceParticipantService)
 
+	mux.HandleFunc("POST /user_activity_preference_participant", userActivityPreferenceParticipantManager.HandleHTTPPost)
+	mux.HandleFunc("GET /user_activity_preference_participants", userActivityPreferenceParticipantManager.HandleHTTPGet)
+	mux.HandleFunc("GET /user_activity_preference_participant/{preference_id}", userActivityPreferenceParticipantManager.HandleHTTPGetByPreferenceID)
+	mux.HandleFunc("PUT /user_activity_preference_participant/{id}", userActivityPreferenceParticipantManager.HandleHTTPPut)
+	mux.HandleFunc("DELETE /user_activity_preference_participant/{id}", userActivityPreferenceParticipantManager.HandleHTTPDelete)
+	mux.HandleFunc("GET /user_activity_preference_participants/preference/{preference_id}", userActivityPreferenceParticipantManager.HandleHTTPGetByPreferenceID)
+
+	scheduledActivityService := scheduled_activities.NewService(postgres.DB, &services)
+	services["scheduled_activities"] = scheduledActivityService
+	scheduledActivityManager := scheduled_activities.NewScheduledActivityHTTPHandler(scheduledActivityService, &services)
 	mux.HandleFunc("POST /scheduled_activity", scheduledActivityManager.HandleHTTPPost)
+	mux.HandleFunc("POST /scheduled_activities", scheduledActivityManager.HandleHTTPPostMultiple)
 	mux.HandleFunc("GET /scheduled_activities", scheduledActivityManager.HandleHTTPGet)
 	mux.HandleFunc("GET /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPDelete)
+	mux.HandleFunc("POST /scheduled_activity/repeat", scheduledActivityManager.HandleHTTPPostRepeatScheduledActivity)
+	mux.HandleFunc("POST /scheduled_activity/repeat/decline", scheduledActivityManager.HandleHTTPPostDeclineRepeatedActivity)
 
 	friendService := friends.NewService(postgres.DB)
+	services["friends"] = friendService
 	friendManager := friends.NewFriendHTTPHandler(friendService)
 
 	mux.HandleFunc("POST /friend", friendManager.HandleHTTPPost)
-	mux.HandleFunc("GET /friend", friendManager.HandleHTTPGet)
-	mux.HandleFunc("GET /friend/{user_id}/{friend_id}", friendManager.HandleHTTPGetWithID)
-	mux.HandleFunc("DELETE /friend/{user_id}/{friend_id}", friendManager.HandleHTTPDelete)
+	mux.HandleFunc("GET /friend/user/{user_id}", friendManager.HandleHTTPGetByUserID)
+	mux.HandleFunc("GET /friend/friend/{friend_id}", friendManager.HandleHTTPGetByFriendID)
+	mux.HandleFunc("GET /friend/are_friends/{user_id}/{friend_id}", friendManager.HandleHTTPGetAreFriends)
+	mux.HandleFunc("DELETE /friend/{user_id}", friendManager.HandleHTTPDelete)
 
 	activityParticipantService := activity_participants.NewService(postgres.DB)
+	services["activity_participants"] = activityParticipantService
 	activityParticipantManager := activity_participants.NewActivityParticipantHTTPHandler(activityParticipantService)
 
 	mux.HandleFunc("POST /activity_participant", activityParticipantManager.HandleHTTPPost)
@@ -83,6 +107,7 @@ func main() {
 	mux.HandleFunc("GET /activity_participants/scheduled_activity/{scheduled_activity_id}", activityParticipantManager.HandleHTTPGetParticipantsByActivityID)
 
 	locationService := locations.NewService(postgres.DB)
+	services["locations"] = locationService
 	locationManager := locations.NewLocationHTTPHandler(locationService)
 
 	mux.HandleFunc("POST /location", locationManager.HandleHTTPPost)
@@ -92,6 +117,7 @@ func main() {
 	mux.HandleFunc("DELETE /location/{id}", locationManager.HandleHTTPDelete)
 
 	activityService := activities.NewService(postgres.DB)
+	services["activities"] = activityService
 	activityManager := activities.NewActivityHTTPHandler(activityService)
 
 	mux.HandleFunc("POST /activity", activityManager.HandleHTTPPost)

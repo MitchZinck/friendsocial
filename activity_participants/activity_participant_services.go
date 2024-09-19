@@ -9,9 +9,10 @@ import (
 )
 
 type ActivityParticipant struct {
-	ID                  int `json:"id"`
-	UserID              int `json:"user_id"`
-	ScheduledActivityID int `json:"scheduled_activity_id"`
+	ID                  int    `json:"id"`
+	UserID              int    `json:"user_id"`
+	ScheduledActivityID int    `json:"scheduled_activity_id"`
+	InviteStatus        string `json:"invite_status"`
 }
 
 type Service struct {
@@ -50,7 +51,7 @@ func (s *Service) ReadAll() ([]ActivityParticipant, error) {
 	defer s.Unlock()
 
 	rows, err := s.db.Query(context.Background(),
-		"SELECT id, user_id, scheduled_activity_id FROM activity_participants")
+		"SELECT id, user_id, scheduled_activity_id, invite_status FROM activity_participants")
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (s *Service) ReadAll() ([]ActivityParticipant, error) {
 	for rows.Next() {
 		var participant ActivityParticipant
 		err := rows.Scan(
-			&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+			&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -77,9 +78,9 @@ func (s *Service) Read(id string) (ActivityParticipant, bool, error) {
 	var participant ActivityParticipant
 	err := s.db.QueryRow(
 		context.Background(),
-		`SELECT id, user_id, scheduled_activity_id 
+		`SELECT id, user_id, scheduled_activity_id, invite_status 
 		FROM activity_participants WHERE id = $1`, id).Scan(
-		&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+		&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -98,9 +99,9 @@ func (s *Service) Update(id string, participant ActivityParticipant) (ActivityPa
 	cmdTag, err := s.db.Exec(
 		context.Background(),
 		`UPDATE activity_participants 
-		SET user_id = $1, scheduled_activity_id = $2
-		WHERE id = $3`,
-		participant.UserID, participant.ScheduledActivityID, id)
+		SET user_id = $1, scheduled_activity_id = $2, invite_status = $3
+		WHERE id = $4`,
+		participant.UserID, participant.ScheduledActivityID, participant.InviteStatus, id)
 
 	if err != nil {
 		return ActivityParticipant{}, false, err
@@ -134,7 +135,7 @@ func (s *Service) GetActivitiesByUserID(userID string) ([]ActivityParticipant, e
 	defer s.Unlock()
 
 	rows, err := s.db.Query(context.Background(),
-		`SELECT id, user_id, scheduled_activity_id 
+		`SELECT id, user_id, scheduled_activity_id, invite_status 
          FROM activity_participants 
          WHERE user_id = $1`, userID)
 	if err != nil {
@@ -145,7 +146,7 @@ func (s *Service) GetActivitiesByUserID(userID string) ([]ActivityParticipant, e
 	var participants []ActivityParticipant
 	for rows.Next() {
 		var participant ActivityParticipant
-		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +161,7 @@ func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID int) 
 	defer s.Unlock()
 
 	rows, err := s.db.Query(context.Background(),
-		`SELECT id, user_id, scheduled_activity_id 
+		`SELECT id, user_id, scheduled_activity_id, invite_status 
          FROM activity_participants 
          WHERE scheduled_activity_id = $1`, scheduledActivityID)
 	if err != nil {
@@ -171,7 +172,7 @@ func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID int) 
 	var participants []ActivityParticipant
 	for rows.Next() {
 		var participant ActivityParticipant
-		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID)
+		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
 		if err != nil {
 			return nil, err
 		}

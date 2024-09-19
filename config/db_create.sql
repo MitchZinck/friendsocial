@@ -41,11 +41,15 @@ CREATE TABLE scheduled_activities (
     activity_id INTEGER NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     scheduled_at TIMESTAMPTZ NOT NULL,
+    user_activity_preference_id INTEGER,
     CONSTRAINT fk_activity_id FOREIGN KEY (activity_id)
-    REFERENCES activities (id)
+    REFERENCES activities (id),
+    CONSTRAINT fk_user_activity_preference FOREIGN KEY (user_activity_preference_id)
+    REFERENCES user_activity_preferences (id)
 );
 
 CREATE INDEX idx_scheduled_activities_activity_id ON scheduled_activities (activity_id); -- Index on activity_id
+CREATE INDEX idx_scheduled_activities_user_activity_preference_id ON scheduled_activities (user_activity_preference_id);
 
 CREATE TABLE friends (
     user_id INTEGER NOT NULL,
@@ -84,6 +88,7 @@ CREATE TABLE user_activity_preferences (
     activity_id INTEGER NOT NULL,
     frequency INTEGER NOT NULL,
     frequency_period VARCHAR(50) NOT NULL, -- e.g., 'daily', 'weekly', 'monthly'
+    days_of_week VARCHAR(50),
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_activity_id FOREIGN KEY (activity_id)
@@ -93,10 +98,25 @@ CREATE TABLE user_activity_preferences (
 CREATE INDEX idx_user_activity_preferences_user_id ON user_activity_preferences (user_id); -- Index on user_id
 CREATE INDEX idx_user_activity_preferences_activity_id ON user_activity_preferences (activity_id); -- Index on activity_id
 
+CREATE TABLE user_activity_preferences_participants (
+    id SERIAL PRIMARY KEY,
+    user_activity_preference_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    CONSTRAINT fk_user_activity_preference_id FOREIGN KEY (user_activity_preference_id)
+    REFERENCES user_activity_preferences (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_id FOREIGN KEY (user_id)
+    REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT uq_user_activity_preference_user UNIQUE (user_activity_preference_id, user_id)
+);
+
+CREATE INDEX idx_user_activity_preferences_participants_user_activity_preference_id ON user_activity_preferences_participants (user_activity_preference_id);
+CREATE INDEX idx_user_activity_preferences_participants_user_id ON user_activity_preferences_participants (user_id);
+
 CREATE TABLE activity_participants (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     scheduled_activity_id INTEGER NOT NULL,
+    invite_status VARCHAR(25) DEFAULT 'Pending' NOT NULL, -- e.g., 'Accepted', 'Rejected', 'Pending'
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_scheduled_activity_id FOREIGN KEY (scheduled_activity_id)

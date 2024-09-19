@@ -12,6 +12,7 @@ type UserActivityPreferenceService interface {
 	Read(id string) (UserActivityPreference, bool, error)
 	Update(id string, preference UserActivityPreference) (UserActivityPreference, bool, error)
 	Delete(id string) (bool, error)
+	ReadByUserID(userID string) ([]UserActivityPreference, error)
 }
 
 // UserActivityPreferenceError represents the error response
@@ -33,6 +34,7 @@ func NewUserActivityPreferenceHTTPHandler(preferenceService UserActivityPreferen
 }
 
 // HandleHTTPPost creates a new user activity preference
+//
 //	@Summary		Create a new user activity preference
 //	@Description	Create a new user activity preference
 //	@Tags			preferences
@@ -67,6 +69,7 @@ func (h *UserActivityPreferenceHTTPHandler) HandleHTTPPost(w http.ResponseWriter
 }
 
 // HandleHTTPGet retrieves all user activity preferences
+//
 //	@Summary		Get all user activity preferences
 //	@Description	Retrieve all user activity preferences
 //	@Tags			preferences
@@ -91,6 +94,8 @@ func (h *UserActivityPreferenceHTTPHandler) HandleHTTPGet(w http.ResponseWriter,
 }
 
 // HandleHTTPGetWithID retrieves a user activity preference by ID
+// HandleHTTPGetWithID retrieves a user activity preference by ID
+//
 //	@Summary		Get a user activity preference by ID
 //	@Description	Retrieve a user activity preference by ID
 //	@Tags			preferences
@@ -124,6 +129,7 @@ func (h *UserActivityPreferenceHTTPHandler) HandleHTTPGetWithID(w http.ResponseW
 }
 
 // HandleHTTPPut updates a user activity preference by ID
+//
 //	@Summary		Update a user activity preference by ID
 //	@Description	Update a user activity preference by ID
 //	@Tags			preferences
@@ -166,6 +172,7 @@ func (h *UserActivityPreferenceHTTPHandler) HandleHTTPPut(w http.ResponseWriter,
 }
 
 // HandleHTTPDelete deletes a user activity preference by ID
+//
 //	@Summary		Delete a user activity preference by ID
 //	@Description	Delete a user activity preference by ID
 //	@Tags			preferences
@@ -202,5 +209,23 @@ func (h *UserActivityPreferenceHTTPHandler) errorResponse(w http.ResponseWriter,
 	})
 	if encodingError != nil {
 		http.Error(w, encodingError.Error(), http.StatusInternalServerError)
+	}
+}
+
+// Add a new method to handle getting preferences by user ID
+func (h *UserActivityPreferenceHTTPHandler) HandleHTTPGetByUserID(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+
+	preferences, err := h.preferenceService.ReadByUserID(userID)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(preferences)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 }

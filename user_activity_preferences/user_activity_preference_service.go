@@ -14,16 +14,19 @@ type UserActivityPreference struct {
 	ActivityID      int    `json:"activity_id"`
 	Frequency       int    `json:"frequency"`
 	FrequencyPeriod string `json:"frequency_period"`
+	DaysOfWeek      string `json:"days_of_week"`
 }
 
 type Service struct {
 	sync.Mutex
-	db *pgxpool.Pool
+	db       *pgxpool.Pool
+	services *map[string]interface{}
 }
 
-func NewService(db *pgxpool.Pool) *Service {
+func NewService(db *pgxpool.Pool, services *map[string]interface{}) *Service {
 	return &Service{
-		db: db,
+		db:       db,
+		services: services,
 	}
 }
 
@@ -33,9 +36,9 @@ func (s *Service) Create(preference UserActivityPreference) (UserActivityPrefere
 	var id int
 	err := s.db.QueryRow(
 		context.Background(),
-		`INSERT INTO user_activity_preferences (user_id, activity_id, frequency, frequency_period) 
-		 VALUES ($1, $2, $3, $4) RETURNING id`,
-		preference.UserID, preference.ActivityID, preference.Frequency, preference.FrequencyPeriod,
+		`INSERT INTO user_activity_preferences (user_id, activity_id, frequency, frequency_period, days_of_week) 
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		preference.UserID, preference.ActivityID, preference.Frequency, preference.FrequencyPeriod, preference.DaysOfWeek,
 	).Scan(&id)
 	if err != nil {
 		return UserActivityPreference{}, err
@@ -49,7 +52,7 @@ func (s *Service) ReadAll() ([]UserActivityPreference, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, activity_id, frequency, frequency_period FROM user_activity_preferences")
+	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, activity_id, frequency, frequency_period, days_of_week FROM user_activity_preferences")
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +61,7 @@ func (s *Service) ReadAll() ([]UserActivityPreference, error) {
 	var preferences []UserActivityPreference
 	for rows.Next() {
 		var preference UserActivityPreference
-		if err := rows.Scan(&preference.ID, &preference.UserID, &preference.ActivityID, &preference.Frequency, &preference.FrequencyPeriod); err != nil {
+		if err := rows.Scan(&preference.ID, &preference.UserID, &preference.ActivityID, &preference.Frequency, &preference.FrequencyPeriod, &preference.DaysOfWeek); err != nil {
 			return nil, err
 		}
 		preferences = append(preferences, preference)
@@ -72,7 +75,7 @@ func (s *Service) Read(id string) (UserActivityPreference, bool, error) {
 	defer s.Unlock()
 
 	var preference UserActivityPreference
-	err := s.db.QueryRow(context.Background(), "SELECT id, user_id, activity_id, frequency, frequency_period FROM user_activity_preferences WHERE id = $1", id).Scan(&preference.ID, &preference.UserID, &preference.ActivityID, &preference.Frequency, &preference.FrequencyPeriod)
+	err := s.db.QueryRow(context.Background(), "SELECT id, user_id, activity_id, frequency, frequency_period, days_of_week FROM user_activity_preferences WHERE id = $1", id).Scan(&preference.ID, &preference.UserID, &preference.ActivityID, &preference.Frequency, &preference.FrequencyPeriod, &preference.DaysOfWeek)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return UserActivityPreference{}, false, nil
@@ -113,4 +116,27 @@ func (s *Service) Delete(id string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// Add a new method to read preferences by user ID
+func (s *Service) ReadByUserID(userID string) ([]UserActivityPreference, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	rows, err := s.db.Query(context.Background(), "SELECT id, user_id, activity_id, frequency, frequency_period, days_of_week FROM user_activity_preferences WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var preferences []UserActivityPreference
+	for rows.Next() {
+		var preference UserActivityPreference
+		if err := rows.Scan(&preference.ID, &preference.UserID, &preference.ActivityID, &preference.Frequency, &preference.FrequencyPeriod, &preference.DaysOfWeek); err != nil {
+			return nil, err
+		}
+		preferences = append(preferences, preference)
+	}
+
+	return preferences, nil
 }

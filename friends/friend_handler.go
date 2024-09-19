@@ -9,8 +9,9 @@ import (
 // FriendService defines the interface for the friend service
 type FriendService interface {
 	Create(userID string, friendID string) (Friend, error)
-	ReadAll(userID string) ([]Friend, error)
-	Read(userID string, friendID string) (bool, error)
+	ReadByUserID(userID string) ([]Friend, error)
+	ReadByFriendID(friendID string) ([]Friend, error)
+	UsersAreFriends(userID string, friendID string) (bool, error)
 	Delete(userID string, friendID string) (bool, error)
 }
 
@@ -33,6 +34,7 @@ func NewFriendHTTPHandler(friendService FriendService) *FriendHTTPHandler {
 }
 
 // HandleHTTPPost creates a new friendship
+//
 //	@Summary		Create a new friendship
 //	@Description	Create a new friendship between two users
 //	@Tags			friends
@@ -70,6 +72,7 @@ func (fH *FriendHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Reque
 }
 
 // HandleHTTPGet retrieves all friends of a user
+//
 //	@Summary		Get all friends of a user
 //	@Description	Retrieve all friendships for a given user
 //	@Tags			friends
@@ -78,10 +81,10 @@ func (fH *FriendHTTPHandler) HandleHTTPPost(w http.ResponseWriter, r *http.Reque
 //	@Success		200		{array}		Friend
 //	@Failure		500		{object}	FriendError
 //	@Router			/friends/{user_id} [get]
-func (fH *FriendHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request) {
+func (fH *FriendHTTPHandler) HandleHTTPGetByUserID(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("user_id")
 
-	friends, err := fH.friendService.ReadAll(userID)
+	friends, err := fH.friendService.ReadByUserID(userID)
 	if err != nil {
 		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
@@ -95,7 +98,8 @@ func (fH *FriendHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// HandleHTTPGetWithID checks if a specific friendship exists
+// HandleHTTPGetByFriendID checks if a specific friendship exists
+//
 //	@Summary		Check if a specific friendship exists
 //	@Description	Check if a friendship exists between two users
 //	@Tags			friends
@@ -106,17 +110,16 @@ func (fH *FriendHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Reques
 //	@Failure		404	{object}	FriendError
 //	@Failure		500	{object}	FriendError
 //	@Router			/friends/{user_id}/{friend_id} [get]
-func (fH *FriendHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	userID := r.PathValue("user_id")
+func (fH *FriendHTTPHandler) HandleHTTPGetByFriendID(w http.ResponseWriter, r *http.Request) {
 	friendID := r.PathValue("friend_id")
 
-	exists, err := fH.friendService.Read(userID, friendID)
+	exists, err := fH.friendService.ReadByFriendID(friendID)
 	if err != nil {
 		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if !exists {
+	if len(exists) == 0 {
 		fH.errorResponse(w, http.StatusNotFound, "Friendship not found")
 		return
 	}
@@ -125,6 +128,7 @@ func (fH *FriendHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.
 }
 
 // HandleHTTPDelete deletes a friendship
+//
 //	@Summary		Delete a friendship
 //	@Description	Delete an existing friendship between two users
 //	@Tags			friends
@@ -150,6 +154,32 @@ func (fH *FriendHTTPHandler) HandleHTTPDelete(w http.ResponseWriter, r *http.Req
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleHTTPGetAreFriends checks if two users are friends
+//
+//	@Summary		Check if two users are friends
+//	@Description	Check if two users are friends
+//	@Tags			friends
+//	@Produce		json
+//	@Param			user_id		path	string	true	"User ID"
+func (fH *FriendHTTPHandler) HandleHTTPGetAreFriends(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+	friendID := r.PathValue("friend_id")
+
+	areFriends, err := fH.friendService.UsersAreFriends(userID, friendID)
+	if err != nil {
+		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(areFriends)
+	if err != nil {
+		fH.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 }
 
 // errorResponse sends a JSON error response

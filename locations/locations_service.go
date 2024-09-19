@@ -10,15 +10,15 @@ import (
 )
 
 type Location struct {
-	ID        int     `json:"id"`
-	Name      string  `json:"name"`
-	Address   string  `json:"address"`
-	City      string  `json:"city"`
-	State     string  `json:"state"`
-	ZipCode   string  `json:"zip_code"`
-	Country   string  `json:"country"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
+	ID        int      `json:"id"`
+	Name      string   `json:"name"`
+	Address   string   `json:"address"`
+	City      string   `json:"city"`
+	State     string   `json:"state"`
+	ZipCode   string   `json:"zip_code"`
+	Country   string   `json:"country"`
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
 }
 
 type Service struct {
