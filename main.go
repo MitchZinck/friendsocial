@@ -34,7 +34,7 @@ func main() {
 
 	mux.HandleFunc("POST /users", userManager.HandleHTTPPost)
 	mux.HandleFunc("GET /users", userManager.HandleHTTPGet)
-	mux.HandleFunc("GET /users/{id}", userManager.HandleHTTPGetWithID)
+	mux.HandleFunc("GET /users/{ids}", userManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /users/{id}", userManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /users/{id}", userManager.HandleHTTPDelete)
 	mux.HandleFunc("PATCH /users/{id}", userManager.HandleHTTPPatch)
@@ -78,7 +78,7 @@ func main() {
 	mux.HandleFunc("POST /scheduled_activity", scheduledActivityManager.HandleHTTPPost)
 	mux.HandleFunc("POST /scheduled_activities", scheduledActivityManager.HandleHTTPPostMultiple)
 	mux.HandleFunc("GET /scheduled_activities", scheduledActivityManager.HandleHTTPGet)
-	mux.HandleFunc("GET /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPGetWithID)
+	mux.HandleFunc("GET /scheduled_activities/{ids}", scheduledActivityManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /scheduled_activity/{id}", scheduledActivityManager.HandleHTTPDelete)
 	mux.HandleFunc("POST /scheduled_activity/repeat", scheduledActivityManager.HandleHTTPPostRepeatScheduledActivity)
@@ -100,11 +100,11 @@ func main() {
 
 	mux.HandleFunc("POST /activity_participant", activityParticipantManager.HandleHTTPPost)
 	mux.HandleFunc("GET /activity_participants", activityParticipantManager.HandleHTTPGet)
-	mux.HandleFunc("GET /activity_participant/{id}", activityParticipantManager.HandleHTTPGetWithID)
+	mux.HandleFunc("GET /activity_participant/{ids}", activityParticipantManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /activity_participant/{id}", activityParticipantManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /activity_participant/{id}", activityParticipantManager.HandleHTTPDelete)
 	mux.HandleFunc("GET /activity_participants/user/{user_id}", activityParticipantManager.HandleHTTPGetActivitiesByUserID)
-	mux.HandleFunc("GET /activity_participants/scheduled_activity/{scheduled_activity_id}", activityParticipantManager.HandleHTTPGetParticipantsByActivityID)
+	mux.HandleFunc("GET /activity_participants/scheduled_activities/{scheduled_activity_ids}", activityParticipantManager.HandleHTTPGetParticipantsByActivityID)
 
 	locationService := locations.NewService(postgres.DB)
 	services["locations"] = locationService
@@ -112,7 +112,7 @@ func main() {
 
 	mux.HandleFunc("POST /location", locationManager.HandleHTTPPost)
 	mux.HandleFunc("GET /locations", locationManager.HandleHTTPGet)
-	mux.HandleFunc("GET /location/{id}", locationManager.HandleHTTPGetWithID)
+	mux.HandleFunc("GET /locations/{ids}", locationManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /location/{id}", locationManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /location/{id}", locationManager.HandleHTTPDelete)
 
@@ -122,7 +122,7 @@ func main() {
 
 	mux.HandleFunc("POST /activity", activityManager.HandleHTTPPost)
 	mux.HandleFunc("GET /activities", activityManager.HandleHTTPGet)
-	mux.HandleFunc("GET /activity/{id}", activityManager.HandleHTTPGetWithID)
+	mux.HandleFunc("GET /activities/{ids}", activityManager.HandleHTTPGetWithID)
 	mux.HandleFunc("PUT /activity/{id}", activityManager.HandleHTTPPut)
 	mux.HandleFunc("DELETE /activity/{id}", activityManager.HandleHTTPDelete)
 

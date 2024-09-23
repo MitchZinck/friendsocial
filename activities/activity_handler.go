@@ -3,13 +3,15 @@ package activities
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // ActivityService defines the interface for activity services
 type ActivityService interface {
 	Create(activity Activity) (Activity, error)
 	ReadAll() ([]Activity, error)
-	Read(id string) (Activity, bool, error)
+	Read(ids []int) ([]Activity, error)
 	Update(id string, activity Activity) (Activity, bool, error)
 	Delete(id string) (bool, error)
 }
@@ -98,28 +100,38 @@ func (aH *ActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Requ
 //	@Description	Get an activity by ID
 //	@Tags			activities
 //	@Produce		json
-//	@Param			id	path		string	true	"Activity ID"
-//	@Success		200	{object}	Activity
+//	@Param			ids	query		[]string	false	"Activity IDs"
+//	@Success		200	{array}		Activity
 //	@Failure		400	{object}	ActivityError
 //	@Failure		404	{object}	ActivityError
 //	@Failure		500	{object}	ActivityError
 //	@Router			/activities/{id} [get]
 func (aH *ActivityHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	ids := r.PathValue("ids")
 
-	activity, found, err := aH.activityService.Read(id)
+	idList := strings.Split(ids, ",")
+	var intIDs []int
+	for _, id := range idList {
+		intID, err := strconv.Atoi(id)
+		if err != nil {
+			aH.errorResponse(w, http.StatusBadRequest, "Invalid ID format")
+			return
+		}
+		intIDs = append(intIDs, intID)
+	}
+	activities, err := aH.activityService.Read(intIDs)
 	if err != nil {
 		aH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !found {
+	if len(activities) == 0 {
 		aH.errorResponse(w, http.StatusNotFound, "Not Found")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(activity)
+	err = json.NewEncoder(w).Encode(activities)
 	if err != nil {
 		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return

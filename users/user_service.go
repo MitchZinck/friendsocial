@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 )
 
 type User struct {
@@ -71,20 +72,31 @@ func (userService *Service) ReadAll() ([]User, error) {
 	return users, nil
 }
 
-func (userService *Service) Read(id string) (User, bool, error) {
+func (userService *Service) Read(ids []int) ([]User, error) {
 	userService.Lock()
 	defer userService.Unlock()
 
-	var user User
-	err := userService.db.QueryRow(context.Background(), "SELECT id, name, email, password, location_id, profile_picture FROM users WHERE id = $1", id).Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.LocationID, &user.ProfilePicture) // Add profile_picture
+	query := "SELECT id, name, email, password, location_id, profile_picture FROM users WHERE id = ANY($1)"
+	var users []User
+	rows, err := userService.db.Query(context.Background(), query, pq.Array(ids))
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return User{}, false, nil
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.LocationID, &user.ProfilePicture); err != nil { // Add profile_picture
+			return nil, err
 		}
-		return User{}, false, err
+		users = append(users, user)
 	}
 
-	return user, true, nil
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 func (userService *Service) Update(id string, user User) (User, bool, error) {

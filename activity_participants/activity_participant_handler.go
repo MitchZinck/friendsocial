@@ -3,18 +3,18 @@ package activity_participants
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
+	"strings"
 )
 
 // ActivityParticipantService defines the methods for handling activity participants
 type ActivityParticipantService interface {
 	Create(participant ActivityParticipant) (ActivityParticipant, error)
 	ReadAll() ([]ActivityParticipant, error)
-	Read(id string) (ActivityParticipant, bool, error)
+	Read(ids []string) ([]ActivityParticipant, error)
 	Update(id string, participant ActivityParticipant) (ActivityParticipant, bool, error)
 	Delete(id string) (bool, error)
 	GetActivitiesByUserID(userID string) ([]ActivityParticipant, error)
-	GetParticipantsByScheduledActivityID(scheduledActivityID int) ([]ActivityParticipant, error)
+	GetParticipantsByScheduledActivityID(scheduledActivityID []string) ([]ActivityParticipant, error)
 }
 
 // ActivityParticipantError represents the structure of an error response
@@ -102,28 +102,28 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r
 //	@Description	Retrieve an activity participant by ID
 //	@Tags			participants
 //	@Produce		json
-//	@Param			id	path		string	true	"Activity Participant ID"
-//	@Success		200	{object}	ActivityParticipant
+//	@Param			ids	query		[]string	false	"Activity Participant IDs"
+//	@Success		200	{array}		ActivityParticipant
 //	@Failure		400	{object}	ActivityParticipantError
 //	@Failure		404	{object}	ActivityParticipantError
 //	@Failure		500	{object}	ActivityParticipantError
 //	@Router			/participants/{id} [get]
 func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	ids := r.PathValue("ids")
 
-	participant, found, err := aH.activityParticipantService.Read(id)
+	participants, err := aH.activityParticipantService.Read([]string{ids})
 	if err != nil {
 		aH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !found {
+	if len(participants) == 0 {
 		aH.errorResponse(w, http.StatusNotFound, "Not Found")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(participant)
+	err = json.NewEncoder(w).Encode(participants)
 	if err != nil {
 		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return
@@ -234,20 +234,16 @@ func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetActivitiesByUserID(w http
 //	@Description	Retrieve all users participating in a scheduled activity
 //	@Tags			participants
 //	@Produce		json
-//	@Param			activity_id	path		int	true	"Scheduled Activity ID"
-//	@Success		200			{array}		ActivityParticipant
-//	@Failure		400			{object}	ActivityParticipantError
-//	@Failure		500			{object}	ActivityParticipantError
+//	@Param			scheduled_activity_ids	path		[]int	true	"Scheduled Activity IDs"
+//	@Success		200						{array}		ActivityParticipant
+//	@Failure		400						{object}	ActivityParticipantError
+//	@Failure		500						{object}	ActivityParticipantError
 //	@Router			/activity_participants/scheduled_activity/{scheduled_activity_id} [get]
 func (aH *ActivityParticipantHTTPHandler) HandleHTTPGetParticipantsByActivityID(w http.ResponseWriter, r *http.Request) {
-	activityIDStr := r.PathValue("scheduled_activity_id")
-	activityID, err := strconv.Atoi(activityIDStr)
-	if err != nil {
-		aH.errorResponse(w, http.StatusBadRequest, "Invalid activity ID")
-		return
-	}
+	scheduledActivityIDs := r.PathValue("scheduled_activity_ids")
 
-	participants, err := aH.activityParticipantService.GetParticipantsByScheduledActivityID(activityID)
+	idList := strings.Split(scheduledActivityIDs, ",")
+	participants, err := aH.activityParticipantService.GetParticipantsByScheduledActivityID(idList)
 	if err != nil {
 		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return

@@ -3,13 +3,15 @@ package users
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // UserService defines the interface for user-related operations
 type UserService interface {
 	Create(user User) (User, error)
 	ReadAll() ([]User, error)
-	Read(id string) (User, bool, error)
+	Read(ids []int) ([]User, error)
 	Update(id string, user User) (User, bool, error)
 	Delete(id string) (bool, error)
 	PartialUpdate(id string, updates map[string]interface{}) (User, bool, error) // Add this line
@@ -107,21 +109,26 @@ func (uH *UserHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Request)
 //	@Failure		500	{object}	UserError
 //	@Router			/users/{id} [get]
 func (uH *UserHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	ids := r.PathValue("ids")
 
-	user, found, err := uH.userService.Read(id)
-	if err != nil {
+	idList := strings.Split(ids, ",")
+	var intIDs []int
+	for _, id := range idList {
+		intID, err := strconv.Atoi(id)
+		if err != nil {
+			uH.errorResponse(w, http.StatusBadRequest, "Invalid ID format")
+			return
+		}
+		intIDs = append(intIDs, intID)
+	}
+	users, err := uH.userService.Read(intIDs)
+	if len(users) == 0 {
 		uH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !found {
-		uH.errorResponse(w, http.StatusNotFound, "Not Found")
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(user)
+	err = json.NewEncoder(w).Encode(users)
 	if err != nil {
 		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return

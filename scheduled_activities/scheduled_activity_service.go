@@ -3,15 +3,14 @@ package scheduled_activities
 import (
 	"context"
 	"fmt"
-	"friendsocial/activity_participants"
 	"friendsocial/user_activity_preferences"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 )
 
 type ScheduledActivity struct {
@@ -229,21 +228,37 @@ func (service *Service) ReadAll() ([]ScheduledActivity, error) {
 	return scheduledActivities, nil
 }
 
-// Read a specific user activity by ID
-func (service *Service) Read(id string) (ScheduledActivity, bool, error) {
+// Read specific user activities by ID
+func (service *Service) Read(ids []int) ([]ScheduledActivity, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	var scheduledActivity ScheduledActivity
-	err := service.db.QueryRow(context.Background(), "SELECT id, activity_id, is_active, scheduled_at, user_activity_preference_id FROM scheduled_activities WHERE id = $1", id).Scan(&scheduledActivity.ID, &scheduledActivity.ActivityID, &scheduledActivity.IsActive, &scheduledActivity.ScheduledAt, &scheduledActivity.UserActivityPreferenceID)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return ScheduledActivity{}, false, nil
-		}
-		return ScheduledActivity{}, false, err
+	if len(ids) == 0 {
+		return []ScheduledActivity{}, nil
 	}
 
-	return scheduledActivity, true, nil
+	query := "SELECT id, activity_id, is_active, scheduled_at, user_activity_preference_id FROM scheduled_activities WHERE id = ANY($1)"
+	var scheduledActivities []ScheduledActivity
+
+	rows, err := service.db.Query(context.Background(), query, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var scheduledActivity ScheduledActivity
+		if err := rows.Scan(&scheduledActivity.ID, &scheduledActivity.ActivityID, &scheduledActivity.IsActive, &scheduledActivity.ScheduledAt, &scheduledActivity.UserActivityPreferenceID); err != nil {
+			return nil, fmt.Errorf("scanning row failed: %w", err)
+		}
+		scheduledActivities = append(scheduledActivities, scheduledActivity)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return scheduledActivities, nil
 }
 
 // Update an existing user activity
@@ -358,11 +373,11 @@ func (s *Service) DeclineRepeatedActivity(userID int, scheduledActivityID int) e
 	return tx.Commit(context.Background())
 }
 
-// CreateRepeatingScheduledActivity creates new, repeating, scheduled activities up to 6 months in advance, based on the user's activity preference
-func (s *Service) CreateRepeatingScheduledActivity(preference user_activity_preferences.UserActivityPreference, startTime string, timeZone string) ([]ScheduledActivity, error) {
-	s.Lock()
-	defer s.Unlock()
-
+func (s *Service) CreateRepeatingScheduledActivity(
+	preference user_activity_preferences.UserActivityPreference,
+	startTime string,
+	timeZone string,
+) ([]ScheduledActivity, error) {
 	// Start a transaction
 	tx, err := s.db.Begin(context.Background())
 	if err != nil {
@@ -383,6 +398,18 @@ func (s *Service) CreateRepeatingScheduledActivity(preference user_activity_pref
 		daysOfWeek = append(daysOfWeek, time.Weekday(dayInt))
 	}
 
+	// Load time zone and parse start time outside the loop
+	loc, err := time.LoadLocation(timeZone)
+	if err != nil {
+		return nil, fmt.Errorf("invalid time zone: %v", err)
+	}
+	startTimeParsed, err := time.Parse(time.RFC3339, startTime)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start time format: %v", err)
+	}
+
+	// Collect scheduled activities data
+	scheduledActivitiesData := [][]interface{}{}
 	scheduledActivities := []ScheduledActivity{}
 
 	for currentDate := now; currentDate.Before(sixMonthsLater); currentDate = currentDate.AddDate(0, 0, 1) {
@@ -394,36 +421,74 @@ func (s *Service) CreateRepeatingScheduledActivity(preference user_activity_pref
 			continue
 		}
 
-		loc, err := time.LoadLocation(timeZone)
-		if err != nil {
-			return nil, fmt.Errorf("invalid time zone: %v", err)
-		}
-		startTimeParsed, err := time.Parse(time.RFC3339, startTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start time format: %v", err)
-		}
-		scheduledAt := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), startTimeParsed.Hour(), startTimeParsed.Minute(), startTimeParsed.Second(), 0, loc)
+		scheduledAt := time.Date(
+			currentDate.Year(), currentDate.Month(), currentDate.Day(),
+			startTimeParsed.Hour(), startTimeParsed.Minute(), startTimeParsed.Second(), 0,
+			loc,
+		)
 
-		newActivity := ScheduledActivity{
+		data := []interface{}{
+			preference.ActivityID, // activity_id
+			true,                  // is_active
+			scheduledAt,           // scheduled_at
+			preference.ID,         // user_activity_preference_id
+		}
+		scheduledActivitiesData = append(scheduledActivitiesData, data)
+
+		// Collect ScheduledActivity structs for returning
+		scheduledActivities = append(scheduledActivities, ScheduledActivity{
 			ActivityID:               preference.ActivityID,
 			IsActive:                 true,
 			ScheduledAt:              scheduledAt,
 			UserActivityPreferenceID: &preference.ID,
+		})
+	}
+
+	// Batch insert scheduled activities
+	if len(scheduledActivitiesData) > 0 {
+		columns := []string{"activity_id", "is_active", "scheduled_at", "user_activity_preference_id"}
+		valueStrings := []string{}
+		values := []interface{}{}
+
+		for _, data := range scheduledActivitiesData {
+			valuePlaceholder := []string{}
+			for j := range columns {
+				values = append(values, data[j])
+				valuePlaceholder = append(valuePlaceholder, fmt.Sprintf("$%d", len(values)))
+			}
+			valueStrings = append(valueStrings, fmt.Sprintf("(%s)", strings.Join(valuePlaceholder, ", ")))
 		}
 
-		scheduledActivityService := (*s.services)["scheduled_activities"].(*Service)
-		createdScheduledActivity, err := scheduledActivityService.Create(newActivity)
+		query := fmt.Sprintf(
+			"INSERT INTO scheduled_activities (%s) VALUES %s RETURNING id",
+			strings.Join(columns, ", "),
+			strings.Join(valueStrings, ", "),
+		)
+
+		rows, err := tx.Query(context.Background(), query, values...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create scheduled activity: %v", err)
+			return nil, fmt.Errorf("failed to batch insert scheduled activities: %v", err)
 		}
+		defer rows.Close()
 
-		scheduledActivities = append(scheduledActivities, createdScheduledActivity)
+		// Collect inserted IDs
+		idx := 0
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				return nil, fmt.Errorf("failed to scan inserted scheduled activity ID: %v", err)
+			}
+			scheduledActivities[idx].ID = id
+			idx++
+		}
 	}
 
 	// Fetch participants for the user activity preference
-	rows, err := tx.Query(context.Background(),
+	rows, err := tx.Query(
+		context.Background(),
 		"SELECT user_id FROM user_activity_preferences_participants WHERE user_activity_preference_id = $1",
-		preference.ID)
+		preference.ID,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch participants: %v", err)
 	}
@@ -438,21 +503,43 @@ func (s *Service) CreateRepeatingScheduledActivity(preference user_activity_pref
 		participantUserIDs = append(participantUserIDs, userID)
 	}
 
-	// Get the activity participant service
-	activityParticipantService := (*s.services)["activity_participants"].(*activity_participants.Service)
-
-	// Create activity participants for each scheduled activity
+	// Collect activity participants data
+	activityParticipantsData := [][]interface{}{}
 	for _, scheduledActivity := range scheduledActivities {
 		for _, userID := range participantUserIDs {
-			participant := activity_participants.ActivityParticipant{
-				UserID:              userID,
-				ScheduledActivityID: scheduledActivity.ID,
-				InviteStatus:        "Pending", // Or whatever default status you want
+			data := []interface{}{
+				userID,               // user_id
+				scheduledActivity.ID, // scheduled_activity_id
+				"Pending",            // invite_status
 			}
-			_, err := activityParticipantService.Create(participant)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create activity participant: %v", err)
+			activityParticipantsData = append(activityParticipantsData, data)
+		}
+	}
+
+	// Batch insert activity participants
+	if len(activityParticipantsData) > 0 {
+		columns := []string{"user_id", "scheduled_activity_id", "invite_status"}
+		valueStrings := []string{}
+		values := []interface{}{}
+
+		for _, data := range activityParticipantsData {
+			valuePlaceholder := []string{}
+			for j := range columns {
+				values = append(values, data[j])
+				valuePlaceholder = append(valuePlaceholder, fmt.Sprintf("$%d", len(values)))
 			}
+			valueStrings = append(valueStrings, fmt.Sprintf("(%s)", strings.Join(valuePlaceholder, ", ")))
+		}
+
+		query := fmt.Sprintf(
+			"INSERT INTO activity_participants (%s) VALUES %s",
+			strings.Join(columns, ", "),
+			strings.Join(valueStrings, ", "),
+		)
+
+		_, err := tx.Exec(context.Background(), query, values...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch insert activity participants: %v", err)
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 	"friendsocial/user_activity_preferences"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // ScheduledActivityService defines the interface for scheduled activity operations.
@@ -12,7 +13,7 @@ type ScheduledActivityService interface {
 	Create(scheduledActivity ScheduledActivity) (ScheduledActivity, error)
 	CreateMultiple(activityID int, selectedDates []string, startTime string, endTime string, timeZone string) ([]ScheduledActivity, error)
 	ReadAll() ([]ScheduledActivity, error)
-	Read(id string) (ScheduledActivity, bool, error)
+	Read(ids []int) ([]ScheduledActivity, error)
 	Update(id string, scheduledActivity ScheduledActivity) (ScheduledActivity, bool, error)
 	Delete(id string) (bool, error)
 	CreateRepeatingScheduledActivity(preference user_activity_preferences.UserActivityPreference, startTime string, timeZone string) ([]ScheduledActivity, error)
@@ -131,6 +132,7 @@ func (uH *ScheduledActivityHTTPHandler) HandleHTTPPostMultiple(w http.ResponseWr
 //	@Description	Get all scheduled activities
 //	@Tags			scheduled_activities
 //	@Produce		json
+//	@Param			ids	query		[]string	false	"Scheduled Activity IDs"
 //	@Success		200	{array}		ScheduledActivity
 //	@Failure		400	{object}	ScheduledActivityError
 //	@Failure		500	{object}	ScheduledActivityError
@@ -163,21 +165,31 @@ func (uH *ScheduledActivityHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *
 //	@Failure		500	{object}	ScheduledActivityError
 //	@Router			/scheduled_activities/{id} [get]
 func (uH *ScheduledActivityHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	ids := r.PathValue("ids")
 
-	scheduledActivity, found, err := uH.scheduledActivityService.Read(id)
+	idList := strings.Split(ids, ",")
+	var intIDs []int
+	for _, id := range idList {
+		intID, err := strconv.Atoi(id)
+		if err != nil {
+			uH.errorResponse(w, http.StatusBadRequest, "Invalid ID format")
+			return
+		}
+		intIDs = append(intIDs, intID)
+	}
+	scheduledActivities, err := uH.scheduledActivityService.Read(intIDs)
 	if err != nil {
 		uH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !found {
+	if len(scheduledActivities) == 0 {
 		uH.errorResponse(w, http.StatusNotFound, "Not Found")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(scheduledActivity)
+	err = json.NewEncoder(w).Encode(scheduledActivities)
 	if err != nil {
 		uH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return

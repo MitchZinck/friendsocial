@@ -3,13 +3,15 @@ package locations
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // LocationService defines the service interface for handling Locations
 type LocationService interface {
 	Create(location Location) (Location, error)
 	ReadAll() ([]Location, error)
-	Read(id string) (Location, bool, error)
+	Read(ids []int) ([]Location, error)
 	Update(id string, location Location) (Location, bool, error)
 	Delete(id string) (bool, error)
 }
@@ -107,21 +109,31 @@ func (aH *LocationHTTPHandler) HandleHTTPGet(w http.ResponseWriter, r *http.Requ
 //	@Failure		500	{object}	LocationError
 //	@Router			/location/{id} [get]
 func (aH *LocationHTTPHandler) HandleHTTPGetWithID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	ids := r.PathValue("ids")
 
-	location, found, err := aH.locationService.Read(id)
+	idList := strings.Split(ids, ",")
+	var intIDs []int
+	for _, id := range idList {
+		intID, err := strconv.Atoi(id)
+		if err != nil {
+			aH.errorResponse(w, http.StatusBadRequest, "Invalid ID format")
+			return
+		}
+		intIDs = append(intIDs, intID)
+	}
+	locations, err := aH.locationService.Read(intIDs)
 	if err != nil {
 		aH.errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !found {
+	if len(locations) == 0 {
 		aH.errorResponse(w, http.StatusNotFound, "Not Found")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(location)
+	err = json.NewEncoder(w).Encode(locations)
 	if err != nil {
 		aH.errorResponse(w, http.StatusInternalServerError, err.Error())
 		return

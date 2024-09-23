@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 )
 
 type Location struct {
@@ -72,21 +72,27 @@ func (service *Service) ReadAll() ([]Location, error) {
 	return locations, nil
 }
 
-func (service *Service) Read(id string) (Location, bool, error) {
+func (service *Service) Read(ids []int) ([]Location, error) {
 	service.Lock()
 	defer service.Unlock()
 
-	var location Location
-	err := service.db.QueryRow(context.Background(), "SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM locations WHERE id = $1", id).Scan(
-		&location.ID, &location.Name, &location.Address, &location.City, &location.State, &location.ZipCode, &location.Country, &location.Latitude, &location.Longitude)
+	query := `SELECT id, name, address, city, state, zip_code, country, latitude, longitude FROM locations WHERE id = ANY($1)`
+	rows, err := service.db.Query(context.Background(), query, pq.Array(ids))
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return Location{}, false, nil
+		return nil, err
+	}
+	defer rows.Close()
+
+	var locations []Location
+	for rows.Next() {
+		var location Location
+		if err := rows.Scan(&location.ID, &location.Name, &location.Address, &location.City, &location.State, &location.ZipCode, &location.Country, &location.Latitude, &location.Longitude); err != nil {
+			return nil, err
 		}
-		return Location{}, false, err
+		locations = append(locations, location)
 	}
 
-	return location, true, nil
+	return locations, nil
 }
 
 func (service *Service) Update(id string, location Location) (Location, bool, error) {

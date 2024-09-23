@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 )
 
 type Activity struct {
@@ -68,23 +68,36 @@ func (activityService *Service) ReadAll() ([]Activity, error) {
 	return activities, nil
 }
 
-func (activityService *Service) Read(id string) (Activity, bool, error) {
+func (activityService *Service) Read(ids []int) ([]Activity, error) {
 	activityService.Lock()
 	defer activityService.Unlock()
 
-	var activity Activity
-	err := activityService.db.QueryRow(context.Background(),
-		`SELECT id, name, emoji, description, estimated_time::text, location_id, user_created 
-		FROM activities 
-		WHERE id = $1`, id).Scan(&activity.ID, &activity.Name, &activity.Emoji, &activity.Description, &activity.EstimatedTime, &activity.LocationID, &activity.UserCreated)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return Activity{}, false, nil
-		}
-		return Activity{}, false, err
+	if len(ids) == 0 {
+		return []Activity{}, nil
 	}
 
-	return activity, true, nil
+	query := "SELECT id, name, emoji, description, estimated_time::text, location_id, user_created FROM activities WHERE id = ANY($1)"
+	var activities []Activity
+	rows, err := activityService.db.Query(context.Background(), query, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var activity Activity
+		if err := rows.Scan(&activity.ID, &activity.Name, &activity.Emoji, &activity.Description,
+			&activity.EstimatedTime, &activity.LocationID, &activity.UserCreated); err != nil {
+			return nil, err
+		}
+		activities = append(activities, activity)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return activities, nil
 }
 
 func (activityService *Service) Update(id string, activity Activity) (Activity, bool, error) {

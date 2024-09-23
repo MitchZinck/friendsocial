@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 )
 
 type ActivityParticipant struct {
@@ -71,25 +71,35 @@ func (s *Service) ReadAll() ([]ActivityParticipant, error) {
 	return participants, nil
 }
 
-func (s *Service) Read(id string) (ActivityParticipant, bool, error) {
+func (s *Service) Read(ids []string) ([]ActivityParticipant, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	var participant ActivityParticipant
-	err := s.db.QueryRow(
-		context.Background(),
-		`SELECT id, user_id, scheduled_activity_id, invite_status 
-		FROM activity_participants WHERE id = $1`, id).Scan(
-		&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
-
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return ActivityParticipant{}, false, nil
-		}
-		return ActivityParticipant{}, false, err
+	if len(ids) == 0 {
+		return []ActivityParticipant{}, nil
 	}
 
-	return participant, true, nil
+	query := "SELECT id, user_id, scheduled_activity_id, invite_status FROM activity_participants WHERE id = ANY($1)"
+	rows, err := s.db.Query(context.Background(), query, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var participants []ActivityParticipant
+	for rows.Next() {
+		var participant ActivityParticipant
+		if err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus); err != nil {
+			return nil, err
+		}
+		participants = append(participants, participant)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return participants, nil
 }
 
 func (s *Service) Update(id string, participant ActivityParticipant) (ActivityParticipant, bool, error) {
@@ -156,14 +166,14 @@ func (s *Service) GetActivitiesByUserID(userID string) ([]ActivityParticipant, e
 	return participants, nil
 }
 
-func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID int) ([]ActivityParticipant, error) {
+func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID []string) ([]ActivityParticipant, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	rows, err := s.db.Query(context.Background(),
-		`SELECT id, user_id, scheduled_activity_id, invite_status 
+	query := `SELECT id, user_id, scheduled_activity_id, invite_status 
          FROM activity_participants 
-         WHERE scheduled_activity_id = $1`, scheduledActivityID)
+         WHERE scheduled_activity_id = ANY($1)`
+	rows, err := s.db.Query(context.Background(), query, pq.Array(scheduledActivityID))
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +182,7 @@ func (s *Service) GetParticipantsByScheduledActivityID(scheduledActivityID int) 
 	var participants []ActivityParticipant
 	for rows.Next() {
 		var participant ActivityParticipant
-		err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus)
-		if err != nil {
+		if err := rows.Scan(&participant.ID, &participant.UserID, &participant.ScheduledActivityID, &participant.InviteStatus); err != nil {
 			return nil, err
 		}
 		participants = append(participants, participant)
