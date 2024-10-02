@@ -26,3 +26,7 @@ FriendSocial is a robust social networking platform that focuses on connecting f
 2. Install dependencies: `go mod download`
 3. Set up your PostgreSQL database and update the connection details in the configuration
 4. Run the service: `go run main.go`
+
+## Frontend
+
+The frontend for FriendSocial is available in the [FriendSocial Frontend repository](https://github.com/MitchZinck/FriendSocial-iOS).
